@@ -32,6 +32,40 @@ ch04/            # 额外包含领域知识库文档(RAG 语料)
 
 > 说明:本仓库为设计文档与知识库语料,代码实现按各章 Plan 在对应分支产出;敏感凭据(模型地址、API Key)一律放 `.env`(gitignore),文档中只出现占位符。
 
+## 快速开始(当前进度:ch01 纯对话)
+
+代码在仓库根目录,随章节演进。前置:Python 3.12 + [uv](https://docs.astral.sh/uv/)。
+
+```bash
+cp .env.example .env      # 填入 CHAT_BASE_URL / CHAT_MODEL / CHAT_API_KEY(上游认的真实模型名)
+uv sync                   # 安装依赖
+uv run uvicorn app.main:app --port 8000   # 或 bash scripts/dev.sh
+```
+
+### ch01 验收命令
+
+```bash
+# 1. 流式对话(SSE:逐 token data: {"delta": ...},结束 data: [DONE])
+curl -sN http://localhost:8000/api/chat -H 'Content-Type: application/json' \
+  -d '{"session_id": "s1", "message": "你们卖猫粮吗?"}'
+
+# 2. 两轮上下文(第二轮须复述第一轮的姓名与商品)
+./scripts/demo_chat.sh
+
+# 3. 结构化售后提取(order_id / request_type / expected_solution)
+curl -s http://localhost:8000/api/extract -H 'Content-Type: application/json' \
+  -d '{"text": "订单 MH20260701123 的猫爬架散架了,我要退款"}'
+
+# 4. 标注样例评估(需服务运行中,5/5 通过)
+uv run python scripts/eval_extract.py
+```
+
+```bash
+uv run pytest             # 单测(20 个,不打真实模型)
+```
+
+> Windows 提示:含中文的请求体建议写入 UTF-8 文件后用 `curl --data-binary @file` 传,避免控制台 GBK 编码问题;启动前 `export PYTHONUTF8=1`(scripts/dev.sh 已内置)。
+
 ## 技术栈
 
 - **后端**:Python 3.12、FastAPI、LangChain / LangGraph、SQLAlchemy 2.0(异步)、uv
