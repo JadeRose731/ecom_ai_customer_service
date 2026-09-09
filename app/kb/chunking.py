@@ -50,3 +50,26 @@ def apply_sentence_overlap(chunks: list[str], overlap: int) -> list[str]:
         ov = _trailing_sentences(chunks[i - 1], overlap)
         out.append(ov + chunks[i] if ov else chunks[i])
     return out
+
+
+_TABLE_SEP_RE = re.compile(r"^\s*\|?[\s:|-]+\|?\s*$")
+
+
+def is_table_block(text: str) -> bool:
+    lines = [ln for ln in text.strip().splitlines() if ln.strip()]
+    return (
+        len(lines) >= 2
+        and lines[0].lstrip().startswith("|")
+        and bool(_TABLE_SEP_RE.match(lines[1])) and "-" in lines[1]
+    )
+
+
+def split_table_rows(table_md: str, max_rows: int) -> list[str]:
+    lines = [ln for ln in table_md.strip().splitlines() if ln.strip()]
+    header, sep, rows = lines[0], lines[1], lines[2:]
+    if len(rows) <= max_rows:
+        return [table_md.strip()]
+    out: list[str] = []
+    for i in range(0, len(rows), max_rows):
+        out.append("\n".join([header, sep, *rows[i:i + max_rows]]))
+    return out
