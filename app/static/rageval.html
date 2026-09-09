@@ -40,6 +40,43 @@
   .hidelist details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
   .hidelist summary { cursor: pointer; color: var(--ink); }
   .hidelist pre { white-space: pre-wrap; word-break: break-word; background: #f8fafc; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+  /* 编造个案台账:状态页签 + 分页 + 个案卡片 */
+  .tabbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .tabbar button { border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 999px;
+                   padding: 3px 14px; cursor: pointer; font-size: 12px; }
+  .tabbar button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .pager button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 3px 12px;
+                  cursor: pointer; font-size: 12px; color: var(--ink); }
+  .pager button:disabled { opacity: .4; cursor: default; }
+  .fcase { border: 1px solid var(--line); border-left: 4px solid var(--st, var(--line)); border-radius: 10px;
+           padding: 10px 14px; margin: 8px 0; font-size: 13px; }
+  .fc-unresolved { --st: #d97706; }
+  .fc-resolved { --st: #16a34a; }
+  .fc-wontfix { --st: #64748b; }
+  .fc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .fc-id { font-family: Consolas, monospace; background: #f1f4f9; border-radius: 6px; padding: 1px 8px; font-size: 12px; }
+  .fc-badge { font-size: 12px; color: var(--st); font-weight: 600; }
+  .fc-seen { font-size: 12px; color: var(--warn); }
+  .fc-time { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .fc-q { font-weight: 600; margin: 2px 0 4px; }
+  .fcase details { margin: 4px 0; }
+  .fcase summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .fcase summary b { color: var(--ink); }
+  .fc-res { font-size: 12px; color: var(--st); margin: 4px 0; }
+  .cite-item { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .cite-item:last-child { border-bottom: none; }
+  .cite-item.cited { background: var(--brand-soft); border-radius: 6px; padding: 6px 8px; }
+  .cite-item .cn { font-family: Consolas, monospace; color: var(--brand); font-weight: 700; margin-right: 6px; }
+  .cite-item .sp { color: var(--muted); font-size: 12px; }
+  .fc-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .fc-actions button { border: 1px solid var(--line); background: #fff; border-radius: 8px;
+                       padding: 3px 12px; cursor: pointer; font-size: 12px; color: var(--ink); }
+  .fc-actions button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .fc-input { display: flex; gap: 8px; margin-top: 8px; }
+  .fc-input input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: 13px; }
+  .fc-input button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 3px 12px;
+                     cursor: pointer; font-size: 12px; }
 </style>
 </head>
 <body class="acceptance">
@@ -91,6 +128,13 @@
     <div class="card">
       <h2>完整数据 <span class="hint">分桶汇总;总体 MRR 最佳一行带底色</span></h2>
       <table class="grid" id="summary-table"></table>
+    </div>
+
+    <div class="card">
+      <h2>编造个案台账 <span class="hint">一题一行跨轮累计 · 判出率只算本轮(KPI 处),处置后旧账不摊到新轮</span></h2>
+      <div class="tabbar" id="fc-tabs"></div>
+      <div id="fc-list"></div>
+      <div class="pager" id="fc-pager"></div>
     </div>
   </div>
 
@@ -240,6 +284,10 @@ function paintKpis() {
   gate(PCT(acAll), '答案覆盖度(' + (best || '—') + ')');
   const rr = generation && generation.refusal ? generation.refusal.rate : null;
   gate(PCT(rr), '库外拒答率(D 桶)');
+  const hal = state.data.hallucination && state.data.hallucination.round ? state.data.hallucination.round : null;
+  gate(hal && hal.rate != null
+    ? PCT(hal.rate) + ' <small>' + hal.judged + ' / ' + (meta.n_samples ?? '—') + '</small>' : '—',
+    '编造判出率(只算本轮)');
   document.getElementById('kpi-gates').innerHTML = gates.join('');
 }
 
@@ -288,12 +336,119 @@ document.getElementById('retrieval-switch').addEventListener('click', (e) => {
   paintRetrieval();
 });
 
-// 作业跑完(页面发起的重跑)自动重新取数
+// 作业跑完(页面发起的重跑)自动重新取数(报告 + 台账都可能变了)
 document.addEventListener('job-done', (e) => {
-  if (e.detail.name === 'eval-rag') { acceptance.toast('评估完成,刷新报告'); load(); }
+  if (e.detail.name === 'eval-rag') { acceptance.toast('评估完成,刷新报告'); load(); loadLedger(); }
 });
 
-load();
+// ---------- 编造个案台账 ----------
+const FC_STATUS = { unresolved: '未解决', resolved: '已解决', wontfix: '无需解决' };
+const fcState = { status: '', page: 1, size: 20 };
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function fmtTime(iso) { return iso ? String(iso).replace('T', ' ').slice(0, 16) : '—'; }
+
+function citedNs(answer) {
+  const ns = new Set();
+  for (const m of String(answer || '').matchAll(/\[(\d{1,2})\]/g)) ns.add(Number(m[1]));
+  return ns;
+}
+
+function fcaseCard(it) {
+  const ns = citedNs(it.answer);
+  const refs = [...ns].sort((a, b) => a - b).map((n) => '[' + n + ']').join('') || '无角标';
+  const cites = (it.citations || []).map((c) => {
+    const a = String(c.answer || '');
+    return '<div class="cite-item' + (ns.has(c.n) ? ' cited' : '') + '">'
+      + '<span class="cn">[' + c.n + ']</span><b>' + esc(c.question) + '</b>'
+      + '<div class="sp">' + esc(c.section_path) + ' · chunk ' + esc(c.id) + '</div>'
+      + '<div>' + esc(a.slice(0, 160)) + (a.length > 160 ? '…' : '') + '</div></div>';
+  }).join('') || '<p class="muted">本轮没有证据快照</p>';
+  const resLine = it.status === 'resolved' ? '怎么解决的:' + esc(it.resolution)
+    : it.status === 'wontfix' ? '为什么不用改:' + esc(it.resolution) : '';
+  const actions = it.status === 'unresolved'
+    ? '<button data-act="resolved">已解决</button><button data-act="wontfix">无需解决</button>'
+    : '<button data-act="unresolved">退回未解决</button>';
+  return '<div class="fcase fc-' + it.status + '" data-id="' + it.id + '">'
+    + '<div class="fc-head"><span class="fc-id">' + esc(it.eval_id) + '</span>'
+    + '<span class="fc-badge">' + FC_STATUS[it.status] + '</span>'
+    + (it.seen_count > 1 ? '<span class="fc-seen">复发 ×' + it.seen_count + '</span>' : '')
+    + '<span class="fc-time">最近 ' + fmtTime(it.last_seen_at) + '</span></div>'
+    + '<div class="fc-q">' + esc(it.query) + '</div>'
+    + '<details><summary>回答全文</summary><pre>' + esc(it.answer) + '</pre></details>'
+    + (resLine ? '<div class="fc-res">' + resLine + '</div>' : '')
+    + '<details><summary>证据快照 · 答案引用 ' + esc(refs) + '</summary>' + cites + '</details>'
+    + '<div class="fc-actions">' + actions + '</div>'
+    + '<div class="fc-input" hidden><input placeholder="怎么解决的 / 为什么不用改(必填)">'
+    + '<button class="fc-ok primary">提交</button><button class="fc-cancel">取消</button></div>'
+    + '</div>';
+}
+
+async function loadLedger() {
+  const q = new URLSearchParams({ page: fcState.page, size: fcState.size });
+  if (fcState.status) q.set('status', fcState.status);
+  const d = await acceptance.api('GET', '/api/rag-eval/faith-cases?' + q.toString());
+  const tabs = [{ key: '', title: '全部' },
+    ...Object.entries(FC_STATUS).map(([key, title]) => ({ key, title }))];
+  document.getElementById('fc-tabs').innerHTML = tabs.map((t) => {
+    const n = t.key === '' ? d.total : (d.counts[t.key] || 0);
+    return '<button data-st="' + t.key + '" class="' + (fcState.status === t.key ? 'on' : '') + '">'
+      + t.title + ' ' + n + '</button>';
+  }).join('');
+  document.getElementById('fc-list').innerHTML = d.items.length
+    ? d.items.map(fcaseCard).join('')
+    : '<p class="muted">台账还是空的——评估判出编造个案后进这里,一题一行跨轮累计。</p>';
+  const pages = Math.max(1, Math.ceil(d.total / fcState.size));
+  document.getElementById('fc-pager').innerHTML =
+    '<button id="fc-prev" ' + (fcState.page <= 1 ? 'disabled' : '') + '>上一页</button>'
+    + '第 ' + fcState.page + ' / ' + pages + ' 页 · 共 ' + d.total + ' 条'
+    + '<button id="fc-next" ' + (fcState.page >= pages ? 'disabled' : '') + '>下一页</button>';
+}
+
+document.getElementById('fc-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-st]');
+  if (!b) return;
+  fcState.status = b.dataset.st; fcState.page = 1; loadLedger();
+});
+document.getElementById('fc-pager').addEventListener('click', (e) => {
+  if (e.target.id === 'fc-prev') { fcState.page--; loadLedger(); }
+  if (e.target.id === 'fc-next') { fcState.page++; loadLedger(); }
+});
+document.getElementById('fc-list').addEventListener('click', async (e) => {
+  const card = e.target.closest('.fcase');
+  if (!card) return;
+  const input = card.querySelector('.fc-input');
+  const actBtn = e.target.closest('.fc-actions button');
+  if (actBtn) {
+    if (actBtn.dataset.act === 'unresolved') {
+      try {
+        await acceptance.api('POST', '/api/rag-eval/faith-cases/' + card.dataset.id + '/status',
+          { status: 'unresolved' });
+        acceptance.toast('已退回未解决'); loadLedger();
+      } catch (err) { acceptance.toast('操作失败:' + err.message, true); }
+    } else {
+      input.hidden = false; input.dataset.act = actBtn.dataset.act;
+      input.querySelector('input').focus();
+    }
+    return;
+  }
+  if (e.target.classList.contains('fc-cancel')) { input.hidden = true; return; }
+  if (e.target.classList.contains('fc-ok')) {
+    const resolution = input.querySelector('input').value.trim();
+    if (!resolution) { acceptance.toast('先写一句说明(怎么解决的 / 为什么不用改)', true); return; }
+    try {
+      await acceptance.api('POST', '/api/rag-eval/faith-cases/' + card.dataset.id + '/status',
+        { status: input.dataset.act, resolution });
+      acceptance.toast('已处置:' + FC_STATUS[input.dataset.act]); loadLedger();
+    } catch (err) { acceptance.toast('操作失败:' + err.message, true); }
+  }
+});
+
+loadLedger();
 acceptance.bindJob(document);
 acceptance.repaintCachedLogs();
 </script>

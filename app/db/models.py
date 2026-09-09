@@ -114,3 +114,25 @@ class LowConfidenceQuestion(Base):
     )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class FaithCase(Base):
+    """编造个案台账:评估判出的编造答案一题一行,跨轮累计;处置状态人工流转。"""
+    __tablename__ = "faith_cases"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    eval_id: Mapped[str] = mapped_column(String(64), unique=True)
+    query: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    citations: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(
+        Enum("unresolved", "resolved", "wontfix"), server_default="unresolved"
+    )
+    resolution: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    seen_count: Mapped[int] = mapped_column(Integer, server_default="1")
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )

@@ -122,6 +122,25 @@ def _evidence_text(hits: list[dict]) -> str:
                      for i, h in enumerate(hits)) or "(无证据)"
 
 
+def _citations_snapshot(hits: list[dict]) -> list[dict]:
+    """Top-K 证据全集快照:顺序与 evidence 拼接一致,答案里的 [n] 即其序号。"""
+    return [{"n": i + 1, "id": h.get("id"), "question": h.get("question", ""),
+             "answer": h.get("answer", ""), "section_path": h.get("section_path", "")}
+            for i, h in enumerate(hits)]
+
+
+def hallucination_round(judged_ids: list[str], n_samples: int, status_map: dict[str, str]) -> dict:
+    """幻觉率只算本轮:分子=本轮判出的题号数;台账累计单独走 ledger——
+    别拿台账总条数当分子,旧账会摊到新一轮头上(处置掉几条之后判出率虚高)。"""
+    ledger = {"total": len(status_map), "unresolved": 0, "resolved": 0, "wontfix": 0}
+    for st in status_map.values():
+        if st in ledger:
+            ledger[st] += 1
+    rate = round(len(judged_ids) / n_samples, 4) if n_samples else None
+    return {"round": {"judged": len(judged_ids), "rate": rate, "cases": list(judged_ids)},
+            "ledger": ledger}
+
+
 async def _deterministic(samples: list[dict]):
     """段1+2:每(策略,题)检索一次,复用同一份 HITS 算 Recall/MRR + 证据覆盖度。"""
     graded = [s for s in samples if s["bucket"] in GRADED_BUCKETS]
@@ -267,16 +286,32 @@ async def _generation(samples: list[dict], HITS: dict) -> dict:
                  "refused": refused, "total": len(absent), "detail": detail}
     _log(f"[D 桶拒答率] {refused}/{len(absent)} = {refusal_d['rate']}")
 
+    # 编造个案落台账(一题一行跨轮累计):只收真判出 False(调用失败 None 不算);
+    # 写库失败只打一行日志,不影响本轮报告——台账是附加的管理视图。
+    answers = dict(hr_answers)
+    judged_ids = [x[0] for x in faith_res if not isinstance(x, Exception) and x[1] is False]
+    for sid in judged_ids:
+        s_row = next(s for s in graded if s["id"] == sid)
+        try:
+            await repository.upsert_faith_case(
+                eval_id=sid, query=s_row["query"], answer=answers.get(sid, ""),
+                citations=_citations_snapshot(HITS.get(("hybrid_rerank", sid), [])))
+        except Exception as e:  # noqa: BLE001
+            _log(f"[台账] 个案 {sid} 写入失败: {type(e).__name__}(不影响本轮报告)")
+    _log(f"[台账] 本轮判出 {len(judged_ids)} 条: {','.join(judged_ids) or '—'}")
+
     return {"done": any(v is not None for st in STRATEGIES for v in answer_coverage[st].values()),
             "answer_coverage": answer_coverage, "faithfulness": faith_d,
+            "faithfulness_cases": judged_ids,
             "refusal": refusal_d, "llm_error_count": len(_ERRS),
             "llm_errors": _ERRS[:20]}
 
 
-def _write_report(retrieval_d: dict, coverage_d: dict, generation_d: dict | None, meta: dict) -> None:
+def _write_report(retrieval_d: dict, coverage_d: dict, generation_d: dict | None,
+                  hallucination_d: dict, meta: dict) -> None:
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
-    report = {"meta": meta, "retrieval": retrieval_d,
-              "evidence_coverage": coverage_d, "generation": generation_d}
+    report = {"meta": meta, "retrieval": retrieval_d, "evidence_coverage": coverage_d,
+              "generation": generation_d, "hallucination": hallucination_d}
     _OUT_TXT.write_text("\n".join(_LINES) + "\n", encoding="utf-8")
     _OUT_JSON.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     _log(f"报告已写入 {_OUT_TXT.name} / {_OUT_JSON.name}")
@@ -302,7 +337,16 @@ async def main() -> None:
                        "rerank": settings.rerank_model},
             # 生成段全 401 时 generation 仍是 dict(逐调用隔离的结构),但 done=false
             "generation_done": bool(generation_d and generation_d.get("done"))}
-    _write_report(retrieval_d, coverage_d, generation_d, meta)
+    judged = list(generation_d.get("faithfulness_cases", [])) if generation_d else []
+    try:
+        status_map = await repository.faith_case_status_map()
+    except Exception as e:  # noqa: BLE001 —— 台账状态回查失败不拖垮报告
+        _log(f"[台账] 状态回查失败: {type(e).__name__}")
+        status_map = {}
+    hallucination_d = hallucination_round(judged, len(samples), status_map)
+    _log(f"[幻觉率·本轮] {hallucination_d['round']['judged']}/{len(samples)} = {hallucination_d['round']['rate']}"
+         f"  台账累计 {hallucination_d['ledger']['total']} 条")
+    _write_report(retrieval_d, coverage_d, generation_d, hallucination_d, meta)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,13 @@
 # app/db/repository.py
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 import app.db.base as db          # 用模块属性引用,便于测试 monkeypatch async_session
-from app.db.models import Conversation, Faq, KnowledgeChunk, LowConfidenceQuestion, Message, QaExtractionStaging, Ticket
+from app.db.models import (
+    Conversation, Faq, FaithCase, KnowledgeChunk, LowConfidenceQuestion, Message,
+    QaExtractionStaging, Ticket,
+)
 
 _TICKET_SEQ = 0
 
@@ -223,3 +226,85 @@ async def insert_low_confidence(
         await s.commit()
         await s.refresh(row)
         return row.id
+
+
+def _faith_dict(row: FaithCase) -> dict:
+    return {
+        "id": row.id, "eval_id": row.eval_id, "query": row.query, "answer": row.answer,
+        "citations": row.citations, "status": row.status, "resolution": row.resolution,
+        "seen_count": row.seen_count, "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
+        "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+async def upsert_faith_case(
+    eval_id: str, query: str, answer: str, citations: list | None
+) -> dict:
+    """编造个案一题一行:已存在则更新快照并 seen_count+1;已处置过的再判出来
+    退回「未解决」(清说明与处置时间)并返回复发标记。"""
+    async with db.async_session() as s:
+        row = (await s.execute(
+            select(FaithCase).where(FaithCase.eval_id == eval_id))).scalar_one_or_none()
+        relapsed = False
+        if row is None:
+            row = FaithCase(eval_id=eval_id, query=query, answer=answer, citations=citations)
+            s.add(row)
+            await s.flush()
+        else:
+            row.query = query
+            row.answer = answer
+            row.citations = citations
+            row.seen_count += 1
+            row.last_seen_at = datetime.now()
+            if row.status != "unresolved":
+                row.status = "unresolved"
+                row.resolution = None
+                row.resolved_at = None
+                relapsed = True
+        await s.commit()
+        return {"id": row.id, "relapsed": relapsed, "seen_count": row.seen_count}
+
+
+async def list_faith_cases(status: str | None, page: int = 1, size: int = 20) -> dict:
+    """台账分页:未解决排前,再按最近出现倒序;带三状态计数(不受筛选影响)。"""
+    async with db.async_session() as s:
+        counts = {"unresolved": 0, "resolved": 0, "wontfix": 0}
+        for st, n in (await s.execute(
+                select(FaithCase.status, func.count()).group_by(FaithCase.status))).all():
+            counts[st] = int(n)
+        conds = [FaithCase.status == status] if status else []
+        total = (await s.execute(
+            select(func.count()).select_from(FaithCase).where(*conds))).scalar_one()
+        rows = (await s.execute(
+            select(FaithCase)
+            .where(*conds)
+            .order_by(case((FaithCase.status == "unresolved", 0), else_=1),
+                      FaithCase.last_seen_at.desc(), FaithCase.id.desc())
+            .offset((page - 1) * size).limit(size))).scalars().all()
+        return {"items": [_faith_dict(r) for r in rows], "total": int(total),
+                "page": page, "size": size, "counts": counts}
+
+
+async def set_faith_case_status(case_id: int, status: str, resolution: str | None = None) -> bool:
+    """处置流转:标已解决/无需解决记说明与处置时间(必填校验在 API 层);退回未解决连说明一起清。"""
+    async with db.async_session() as s:
+        row = await s.get(FaithCase, case_id)
+        if row is None:
+            return False
+        row.status = status
+        if status == "unresolved":
+            row.resolution = None
+            row.resolved_at = None
+        else:
+            row.resolution = resolution
+            row.resolved_at = datetime.now()
+        await s.commit()
+        return True
+
+
+async def faith_case_status_map() -> dict[str, str]:
+    """eval_id → 处置状态;评估报告侧把本轮判出的个案对回台账状态用。"""
+    async with db.async_session() as s:
+        rows = (await s.execute(select(FaithCase.eval_id, FaithCase.status))).all()
+        return {eid: st for eid, st in rows}
