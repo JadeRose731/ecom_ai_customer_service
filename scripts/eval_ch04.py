@@ -12,6 +12,7 @@ generation=null 照样落盘,页面标注未完成,恢复后重跑补全。
 """
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 
@@ -22,9 +23,12 @@ from app.config import settings
 from app.core import retrieval
 from app.core.llm import get_chat_model
 from app.core.prompts import FAITHFULNESS_PROMPT, RAG_ANSWER_PROMPT
+from app.db import repository
 from app.tools.business import query_faq
 
-STRATEGIES = ["vector", "bm25", "hybrid", "hybrid_rerank"]
+# 默认四策略全跑;无 key 阶段可 EVAL_STRATEGIES=bm25 只跑确定性的纯 BM25 行
+STRATEGIES = [s.strip() for s in os.environ.get(
+    "EVAL_STRATEGIES", "vector,bm25,hybrid,hybrid_rerank").split(",") if s.strip()]
 GRADED_BUCKETS = ["A_policy", "B_model", "C_colloquial"]
 K = 10
 RETR_CONCURRENCY, GEN_CONCURRENCY, CALL_TIMEOUT = 8, 3, 45.0
@@ -239,7 +243,8 @@ async def _generation(samples: list[dict], HITS: dict) -> dict:
                  "refused": refused, "total": len(absent), "detail": detail}
     _log(f"[D 桶拒答率] {refused}/{len(absent)} = {refusal_d['rate']}")
 
-    return {"answer_coverage": answer_coverage, "faithfulness": faith_d,
+    return {"done": any(v is not None for st in STRATEGIES for v in answer_coverage[st].values()),
+            "answer_coverage": answer_coverage, "faithfulness": faith_d,
             "refusal": refusal_d, "llm_error_count": len(_ERRS),
             "llm_errors": _ERRS[:20]}
 
@@ -265,9 +270,11 @@ async def main() -> None:
         _log(f"[生成段未完成] {type(e).__name__}: {e}")
     meta = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "elapsed_s": round(time.time() - t0, 1),
             "k": K, "strategies": STRATEGIES, "n_samples": len(samples),
+            "kb_chunks": (await repository.knowledge_stats())["total"],   # 报告头:本次跑时的库规模
             "models": {"chat": settings.chat_model, "embed": settings.embed_model,
                        "rerank": settings.rerank_model},
-            "generation_done": generation_d is not None}
+            # 生成段全 401 时 generation 仍是 dict(逐调用隔离的结构),但 done=false
+            "generation_done": bool(generation_d and generation_d.get("done"))}
     _write_report(retrieval_d, coverage_d, generation_d, meta)
 
 

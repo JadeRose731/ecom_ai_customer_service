@@ -28,6 +28,7 @@ JOBS: dict[str, JobSpec] = {
         JobSpec("kb-mine", "kb-mine", heavy=True),
         JobSpec("kb-reset", "kb-reset", heavy=True),
         JobSpec("seed-conv", "seed-conv"),
+        JobSpec("eval-rag", "eval-rag", heavy=True),   # ch04:四策略评估,分钟级重活
     )
 }
 

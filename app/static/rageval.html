@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>喵喵优选 · RAG 评估</title>
+<link rel="stylesheet" href="/static/acceptance.css">
+<style>
+  /* 四策略固定配色(图例/柱/表行同源) */
+  .st-vector { --st: #94a3b8; }
+  .st-bm25 { --st: #60a5fa; }
+  .st-hybrid { --st: #f59e0b; }
+  .st-hybrid_rerank { --st: #ff7a45; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--st); margin-right: 4px; }
+  .metric-switch { display: flex; gap: 6px; margin-left: auto; }
+  .metric-switch button { border: 1px solid var(--line); background: #fff; color: var(--muted);
+                          border-radius: 8px; padding: 3px 12px; cursor: pointer; font-size: 12px; }
+  .metric-switch button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  /* 分组柱状图:每桶一组,组内四策略横条 */
+  .grp { margin: 10px 0; }
+  .grp .grp-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .bar-row .who { width: 110px; font-size: 12px; color: var(--muted); text-align: right; flex: none; }
+  .bar-row .track { flex: 1; background: #f1f4f9; border-radius: 6px; height: 14px; overflow: hidden; }
+  .bar-row .fill { height: 100%; background: var(--st); border-radius: 6px; min-width: 1px; transition: width .3s; }
+  .bar-row .val { width: 52px; font-size: 12px; font-family: Consolas, monospace; flex: none; }
+  .read-hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  /* KPI */
+  .kpi .num { font-size: 24px; font-weight: 700; }
+  .kpi .num small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  /* 汇总表 */
+  table.grid td.best { background: var(--brand-soft); font-weight: 600; }
+  /* 拒答率圆环 */
+  .ring-wrap { display: flex; gap: 18px; align-items: center; }
+  .ring-wrap svg { flex: none; }
+  .ring-label { font-size: 13px; }
+  .ring-label b { font-size: 20px; }
+  .warnline { color: var(--warn); font-size: 13px; margin-bottom: 10px; }
+  .hidelist details { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+  .hidelist summary { cursor: pointer; color: var(--ink); }
+  .hidelist pre { white-space: pre-wrap; word-break: break-word; background: #f8fafc; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+</style>
+</head>
+<body class="acceptance">
+<div class="acceptance-wrap" data-admin-nav-anchor>
+  <div class="card">
+    <h2>RAG 评估报告 <span class="hint">四策略对照 · 页面只读产物,数与终端 make eval-rag 同一份</span></h2>
+    <div class="btnrow">
+      <button class="act primary" data-job="eval-rag" data-heavy="1">重跑 RAG 评估</button>
+      <span class="muted" style="font-size:12px">需 Milvus + 已建库 + 上游可用,分钟级</span>
+    </div>
+  </div>
+
+  <div id="not-run" class="card" hidden>
+    <h2>还没跑过评估</h2>
+    <p class="muted">产物 data/ch04/reports/rag_eval.json 不存在(或写坏了)。点上面的「重跑 RAG 评估」跑一次,跑完这里自动出数。</p>
+  </div>
+
+  <div id="report" hidden>
+    <div class="card">
+      <h2>报告头 <span class="hint" id="meta-ts"></span></h2>
+      <div class="gatebar" id="meta-gates"></div>
+    </div>
+
+    <div class="card">
+      <h2>四项 KPI <span class="hint">结论性派生量 best 在 API 里算过一次,这里只呈现</span></h2>
+      <div class="warnline" id="gen-warn" hidden>⚠️ 生成段本次未完成(上游不可用),检索段数字完整;补跑一次就齐。</div>
+      <div class="gatebar" id="kpi-gates"></div>
+    </div>
+
+    <div class="card">
+      <h2>检索质量
+        <span class="hint">四策略 × 可作答桶</span>
+        <span class="metric-switch" id="retrieval-switch">
+          <button data-metric="mrr" class="on">MRR</button>
+          <button data-metric="recall">Recall@<span class="kcap">10</span></button>
+          <button data-metric="cov">证据覆盖度</button>
+        </span>
+      </h2>
+      <div class="legend" id="retrieval-legend"></div>
+      <div id="retrieval-chart"></div>
+      <div class="read-hint" id="retrieval-hint"></div>
+    </div>
+
+    <div class="card">
+      <h2>生成质量 <span class="hint">证据 → 生成 → 裁判;拒答走线上管线(含两道证据闸)</span></h2>
+      <div id="generation-body"></div>
+    </div>
+
+    <div class="card">
+      <h2>完整数据 <span class="hint">分桶汇总;总体 MRR 最佳一行带底色</span></h2>
+      <table class="grid" id="summary-table"></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>作业日志 <span class="hint">make eval-rag 的输出逐行回显</span></h2>
+    <div class="logwin" data-log="eval-rag"></div>
+  </div>
+</div>
+
+<script src="/static/admin.js"></script>
+<script src="/static/acceptance.js"></script>
+<script>
+mountAdminNav('eval');
+
+const STRATS = [
+  { key: 'vector', title: '纯向量' },
+  { key: 'bm25', title: '纯 BM25' },
+  { key: 'hybrid', title: '混合 RRF' },
+  { key: 'hybrid_rerank', title: '混合+重排' },
+];
+const BUCKETS = [
+  { key: 'A_policy', title: 'A 政策' },
+  { key: 'B_model', title: 'B 型号' },
+  { key: 'C_colloquial', title: 'C 口语' },
+  { key: 'all', title: '总体' },
+];
+const PCT = (v) => (v == null ? '—' : (v * 100).toFixed(1) + '%');
+
+let state = { data: null, metric: 'mrr' };
+
+function barRow(cls, who, ratio, valText) {
+  const w = Math.max(0, Math.min(100, (ratio || 0) * 100));
+  return '<div class="bar-row ' + cls + '">'
+    + '<span class="who">' + who + '</span>'
+    + '<span class="track"><span class="fill" style="width:' + w + '%"></span></span>'
+    + '<span class="val">' + valText + '</span></div>';
+}
+
+function paintRetrieval() {
+  const { retrieval, evidence_coverage: cov } = state.data;
+  const chart = document.getElementById('retrieval-chart');
+  const hint = document.getElementById('retrieval-hint');
+  const legend = STRATS.map((s) => '<span class="st-' + s.key + '"><i></i>' + s.title + '</span>').join('');
+  document.getElementById('retrieval-legend').innerHTML = legend;
+  const metric = state.metric;
+  document.querySelector('#retrieval-switch .kcap').textContent = (state.data.meta && state.data.meta.k) || 10;
+
+  if (metric === 'cov') {
+    // 证据覆盖度只有总体一档(确定性机械匹配)
+    chart.innerHTML = STRATS.map((s) =>
+      barRow('st-' + s.key, s.title, cov[s.key], PCT(cov[s.key]))).join('');
+    const best = STRATS.reduce((a, b) => (cov[b.key] > cov[a.key] ? b : a), STRATS[0]);
+    hint.textContent = '读图:证据覆盖度按 expect_points 在召回 Top-K 里去空白子串命中,'
+      + best.title + ' 最高(' + PCT(cov[best.key]) + ')。';
+    return;
+  }
+  chart.innerHTML = BUCKETS.map((b) => {
+    const rows = STRATS.map((s) => {
+      const v = (retrieval[s.key][b.key] || {})[metric];
+      return barRow('st-' + s.key, s.title, v, PCT(v));
+    }).join('');
+    return '<div class="grp"><div class="grp-title">' + b.title + '</div>' + rows + '</div>';
+  }).join('');
+  const all = (s) => retrieval[s.key].all[metric];
+  const best = STRATS.reduce((a, b) => (all(b) > all(a) ? b : a), STRATS[0]);
+  const cmpV = (bucketKey) => {
+    const b = retrieval.bm25[bucketKey][metric], v = retrieval.vector[bucketKey][metric];
+    return b > v ? '高于' : b < v ? '低于' : '持平于';
+  };
+  hint.textContent = '读图:' + best.title + ' 总体 ' + (metric === 'mrr' ? 'MRR' : 'Recall') + ' 最高('
+    + PCT(all(best)) + ');纯 BM25 在 B 桶(型号题)' + cmpV('B_model') + '纯向量,'
+    + '在 C 桶(口语题)' + cmpV('C_colloquial') + '纯向量——口语问法少了型号词可依。';
+}
+
+function ring(rate) {
+  const r = 46, c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(1, rate || 0));
+  return '<svg width="120" height="120" viewBox="0 0 120 120">'
+    + '<circle cx="60" cy="60" r="' + r + '" fill="none" stroke="#f1f4f9" stroke-width="12"/>'
+    + '<circle cx="60" cy="60" r="' + r + '" fill="none" stroke="#16a34a" stroke-width="12"'
+    + ' stroke-linecap="round" stroke-dasharray="' + (c * v).toFixed(1) + ' ' + c.toFixed(1) + '"'
+    + ' transform="rotate(-90 60 60)"/>'
+    + '<text x="60" y="66" text-anchor="middle" font-size="20" font-weight="700" fill="#1f2430">'
+    + PCT(rate) + '</text></svg>';
+}
+
+function paintGeneration() {
+  const g = state.data.generation;
+  const body = document.getElementById('generation-body');
+  document.getElementById('gen-warn').hidden = !!state.data.generation_done;
+  if (!g) {
+    body.innerHTML = '<p class="muted">生成段本轮没有产出(裁判/生成上游不可用),只有检索段数字。</p>';
+    return;
+  }
+  const ac = g.answer_coverage || {};
+  let html = '<div class="grp"><div class="grp-title">答案覆盖度(总体;裁判判盖住要点数)</div>'
+    + STRATS.map((s) => {
+      const v = (ac[s.key] || {}).all;
+      return barRow('st-' + s.key, s.title, v, PCT(v));
+    }).join('') + '</div>';
+  const f = g.faithfulness || {};
+  html += '<div class="grp"><div class="grp-title">忠实度(上线策略 混合+重排;裁判判无编造占比)</div>'
+    + (f.rate == null ? '<p class="muted">本轮未产出</p>'
+      : barRow('st-hybrid_rerank', '混合+重排', f.rate, PCT(f.rate) + ' (n=' + f.n + ')'))
+    + '</div>';
+  const r = g.refusal || {};
+  html += '<div class="grp"><div class="grp-title">库外拒答率(D 桶:库里没有的问题,应拒答)</div>'
+    + '<div class="ring-wrap">' + ring(r.rate)
+    + '<div class="ring-label">拒答 <b>' + PCT(r.rate) + '</b><br>'
+    + '<span class="muted">' + (r.refused ?? '—') + ' / ' + (r.total ?? '—') + ' 题(线上管线端到端,含两道证据闸)</span></div></div></div>';
+  body.innerHTML = html;
+}
+
+function paintSummary() {
+  const { retrieval, evidence_coverage: cov, generation } = state.data;
+  const best = state.data.best;
+  const ac = (generation || {}).answer_coverage || {};
+  let html = '<tr><th>策略</th>';
+  BUCKETS.forEach((b) => { html += '<th>MRR · ' + b.title + '</th><th>R · ' + b.title + '</th>'; });
+  html += '<th>证据覆盖度</th><th>答案覆盖度</th></tr>';
+  STRATS.forEach((s) => {
+    const cls = s.key === best ? ' class="best"' : '';
+    html += '<tr><td' + cls + '><span class="st-' + s.key + '"><i style="display:inline-block;width:9px;height:9px;'
+      + 'border-radius:3px;background:var(--st);margin-right:6px"></i>' + s.title + (s.key === best ? ' ★' : '') + '</span></td>';
+    BUCKETS.forEach((b) => {
+      const per = retrieval[s.key][b.key] || {};
+      html += '<td' + cls + '>' + PCT(per.mrr) + '</td><td>' + PCT(per.recall) + '</td>';
+    });
+    html += '<td>' + PCT(cov[s.key]) + '</td><td>' + PCT((ac[s.key] || {}).all) + '</td></tr>';
+  });
+  document.getElementById('summary-table').innerHTML = html;
+}
+
+function paintKpis() {
+  const { meta, retrieval, generation, best } = state.data;
+  const gates = [];
+  const gate = (num, label) => gates.push('<div class="gate kpi"><div class="num">' + num + '</div><div class="label">' + label + '</div></div>');
+  const bestMrr = best ? retrieval[best].all.mrr : null;
+  gate(bestMrr == null ? '—' : PCT(bestMrr) + ' <small>' + (STRATS.find((s) => s.key === best) || {}).title + '</small>', '最佳整体 MRR');
+  let lift = null;
+  if (best && retrieval[best].C_colloquial && retrieval.vector) {
+    lift = retrieval[best].C_colloquial.mrr - retrieval.vector.C_colloquial.mrr;
+  }
+  gate(lift == null ? '—' : (lift >= 0 ? '+' : '') + PCT(lift), '口语桶 MRR 提升(vs 纯向量)');
+  const acAll = generation && generation.answer_coverage ? (generation.answer_coverage[best] || {}).all : null;
+  gate(PCT(acAll), '答案覆盖度(' + (best || '—') + ')');
+  const rr = generation && generation.refusal ? generation.refusal.rate : null;
+  gate(PCT(rr), '库外拒答率(D 桶)');
+  document.getElementById('kpi-gates').innerHTML = gates.join('');
+}
+
+function paintMeta() {
+  const m = state.data.meta || {};
+  const gates = [];
+  const gate = (num, label) => gates.push('<div class="gate"><div class="num">' + num + '</div><div class="label">' + label + '</div></div>');
+  gate(m.n_samples ?? '—', '评估集题数');
+  gate(m.kb_chunks ?? '—', '知识库块数');
+  gate(m.k ?? '—', 'Recall@K');
+  const mo = m.models || {};
+  gate((mo.embed || '—').split('/').pop(), '嵌入模型');
+  gate((mo.rerank || '—').split('/').pop(), '重排模型');
+  gate((mo.chat || '—').split('/').pop(), '生成/裁判模型');
+  document.getElementById('meta-gates').innerHTML = gates.join('');
+  document.getElementById('meta-ts').textContent = m.ts ? '上次跑于 ' + m.ts + ' · 耗时 ' + m.elapsed_s + 's' : '';
+}
+
+function paintAll() {
+  const d = state.data;
+  const has = !!d.present;
+  document.getElementById('not-run').hidden = has;
+  document.getElementById('report').hidden = !has;
+  if (!has) return;
+  paintMeta();
+  paintKpis();
+  paintRetrieval();
+  paintGeneration();
+  paintSummary();
+}
+
+async function load() {
+  try {
+    state.data = await acceptance.api('GET', '/api/rag-eval/overview');
+    paintAll();
+  } catch (e) {
+    acceptance.toast('取数失败:' + e.message, true);
+  }
+}
+
+document.getElementById('retrieval-switch').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-metric]');
+  if (!btn) return;
+  state.metric = btn.dataset.metric;
+  document.querySelectorAll('#retrieval-switch button').forEach((b) => b.classList.toggle('on', b === btn));
+  paintRetrieval();
+});
+
+// 作业跑完(页面发起的重跑)自动重新取数
+document.addEventListener('job-done', (e) => {
+  if (e.detail.name === 'eval-rag') { acceptance.toast('评估完成,刷新报告'); load(); }
+});
+
+load();
+acceptance.bindJob(document);
+acceptance.repaintCachedLogs();
+</script>
+</body>
+</html>

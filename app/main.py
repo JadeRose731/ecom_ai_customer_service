@@ -10,6 +10,7 @@ from app.api.extract import router as extract_router
 from app.api.jobs import router as jobs_router
 from app.api.kb import router as kb_router
 from app.api.admin import router as admin_router
+from app.api.rageval import router as rageval_router
 
 app = FastAPI(title="MewHelp", version="0.1.0")
 app.include_router(chat_router)
@@ -18,6 +19,7 @@ app.include_router(agent_router)
 app.include_router(kb_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)
+app.include_router(rageval_router)
 
 # ch03 后台页面:各页保持原路径(路由必须先于根路径 StaticFiles 挂载注册,否则被吞)
 _STATIC = pathlib.Path(__file__).resolve().parent / "static"
@@ -31,6 +33,11 @@ async def kb_page():
 @app.get("/admin")
 async def admin_page():
     return FileResponse(_STATIC / "admin.html")
+
+
+@app.get("/rag-eval")
+async def rageval_page():
+    return FileResponse(_STATIC / "rageval.html")
 
 
 # ch03:后台共用静态资源挂 /static(页面里引 /static/admin.js 等)。

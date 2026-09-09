@@ -31,6 +31,24 @@ async def _staging_metrics() -> dict:
     return await staging_stats()
 
 
+async def _rageval_metrics() -> dict:
+    # 只读 rag_eval.json 产物(缺失/写坏都按没跑过),复用 rageval 的读取与派生
+    from app.api.rageval import derive_best, load_report
+    report = load_report()
+    if report is None:
+        return {"present": False}
+    gen = report.get("generation") or {}
+    refusal = (gen.get("refusal") or {}).get("rate")
+    return {
+        "present": True,
+        "best": derive_best(report),
+        "best_mrr": ((report.get("retrieval") or {}).get(derive_best(report) or "", {})
+                     or {}).get("all", {}).get("mrr"),
+        "n_samples": (report.get("meta") or {}).get("n_samples"),
+        "refusal_rate": refusal,
+    }
+
+
 # (key, 标题, 读数函数, 空数据/要干活的判定与结论)
 _CARDS = (
     ("chat", "会话与消息", _chat_metrics,
@@ -42,6 +60,9 @@ _CARDS = (
      lambda m: ("empty", "集合是空的") if m["vectors"] == 0 else ("ok", "可检索")),
     ("staging", "挖知识暂存", _staging_metrics,
      lambda m: ("empty", "暂存表无数据") if sum(m.values()) == 0 else ("ok", "有沉淀待审")),
+    ("rageval", "RAG 评估", _rageval_metrics,
+     lambda m: ("empty", "还没跑过(评估页可发起)") if not m.get("present")
+     else ("ok", f"最佳 {m['best']} · MRR {m['best_mrr']}")),
 )
 
 

@@ -7,6 +7,7 @@
   const MODULES = [
     { key: 'chat', title: '智能客服', pages: [{ href: '/', title: '聊天页' }] },
     { key: 'kb', title: '知识库', pages: [{ href: '/kb', title: '录入页' }, { href: '/admin', title: '后台首页' }] },
+    { key: 'eval', title: 'RAG 评估', pages: [{ href: '/rag-eval', title: '评估报告' }] },
   ];
 
   const STYLE = `
