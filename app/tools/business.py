@@ -1,7 +1,8 @@
 # app/tools/business.py
 import random
+from typing import Annotated, Literal
 
-from langchain_core.tools import tool
+from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 
 from app.db import repository
@@ -61,3 +62,14 @@ async def query_faq(keyword: str) -> dict:
     if not rows:
         return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
     return {"hits": [{"question": r.question, "answer": r.answer} for r in rows]}
+
+@tool
+async def create_ticket(
+    description: str,
+    ticket_type: Literal["售后", "投诉", "咨询"],
+    conversation_id: Annotated[int, InjectedToolArg],
+) -> dict:
+    """当用户问题需要人工介入(投诉、无法自助解决、明确要求人工)时,创建人工工单。
+    description 填用户问题描述,ticket_type 从 售后/投诉/咨询 中选。"""
+    ticket_no = await repository.create_ticket(conversation_id, description, ticket_type)
+    return {"ticket_no": ticket_no, "status": "已转人工"}
