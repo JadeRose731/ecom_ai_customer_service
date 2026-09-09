@@ -66,6 +66,23 @@ uv run pytest             # 单测(20 个,不打真实模型)
 
 > Windows 提示:含中文的请求体建议写入 UTF-8 文件后用 `curl --data-binary @file` 传,避免控制台 GBK 编码问题;启动前 `export PYTHONUTF8=1`(scripts/dev.sh 已内置)。
 
+## ch02:Function Calling 工具链
+
+在 ch01 纯对话上装「查数据」能力:5 个 `@tool` 工具(query_order / query_product / query_logistics / query_faq / create_ticket),模型经 Function Calling 自选工具,后端单轮执行回灌,最终回答仍 SSE 逐 token;会话与消息落 MySQL,聊天页显示工具轨迹徽章。
+
+```bash
+docker compose up -d      # MySQL 8(本机 3306 被占,映射到 3307)
+make seed                 # 灌 faq 种子数据(幂等)
+uv run uvicorn app.main:app --port 8000   # 起应用
+```
+
+验收入口:
+
+- **聊天页** `http://localhost:8000`:问「订单 1001 的物流到哪了」→ 气泡出现「🔧 调用了 query_logistics」徽章并按结果作答;「退货政策是什么」→ query_faq 命中;「邮费是多少」→ 漏召回(预期,留 ch03 向量检索);「+ 新对话」清空会话。
+- **程序化出口**:`curl -s http://localhost:8000/api/agent -H 'Content-Type: application/json' -d '{"user_id":"u1","message":"订单 1001 的物流到哪了"}'`,或 `./scripts/demo_agent.sh`。
+- **标注样例评估**(7 条,核对选工具):`make eval-agent`。
+- **单测**(51 个,Fake 模型不打真实上游):`uv run pytest`。
+
 ## 技术栈
 
 - **后端**:Python 3.12、FastAPI、LangChain / LangGraph、SQLAlchemy 2.0(异步)、uv
