@@ -131,3 +131,18 @@ FAITHFULNESS_SYSTEM = """你是回答忠实度评审员。给定检索证据和�
 FAITHFULNESS_PROMPT = ChatPromptTemplate.from_messages(
     [("system", FAITHFULNESS_SYSTEM), ("human", "检索证据:\n{evidence}\n\n客服回答:\n{answer}")]
 )
+
+# ---- ch05 意图分类(七类单标签) ----
+INTENT_CLASSIFY_SYSTEM = """你是电商客服的意图分类器。把用户这句话归到且仅归到下面七类之一,输出分类结果:
+- 物流:问快递到哪了、发货没、物流进度(通常带订单号/单号)。
+- 订单:问某订单的状态、金额、下单时间、买了什么。
+- 商品咨询:问商品价格、库存、规格、功能、怎么用等通用商品/政策/FAQ 问题。
+- 退款退货:想退款、退货、换货,或问退换货政策/流程。
+- 售后:维修、保修、换新进度等售后处理(不含退款退货)。
+- 投诉:表达强烈不满、要投诉、要说法(不夹带可自助解决的具体查询时)。
+- 闲聊:问候、寒暄、与购物无关的话题。
+判不准时选最接近的一类;严格从这七类里选,不要造新类。"""
+
+INTENT_CLASSIFY_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", INTENT_CLASSIFY_SYSTEM), ("human", "用户这句话:{query}")]
+)
