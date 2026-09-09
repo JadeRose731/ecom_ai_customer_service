@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>后台管理 · 喵喵优选</title>
+<link rel="stylesheet" href="/static/acceptance.css">
+</head>
+<body class="acceptance" data-admin-nav-anchor="wrap">
+<div class="acceptance-wrap" id="wrap">
+  <div class="card">
+    <h2>后台管理 <span class="hint">各模块一张卡;某块依赖没起只影响它自己</span></h2>
+    <div class="gatebar" id="cards"></div>
+  </div>
+</div>
+<script src="/static/acceptance.js"></script>
+<script src="/static/admin.js"></script>
+<script>
+mountAdminNav('admin');
+const { api, toast } = window.acceptance;
+
+const ENTRY = { kb: '/kb', chat: '/', milvus: '/kb', staging: '/kb' };
+const PILL = { ok: 'ok', todo: 'todo', empty: 'empty', unreachable: 'bad' };
+
+async function refresh() {
+  const box = document.getElementById('cards');
+  box.innerHTML = '';
+  try {
+    const data = await api('GET', '/api/admin/overview');
+    data.cards.forEach((c) => {
+      const el = document.createElement('div');
+      el.className = 'gate';
+      const metrics = Object.entries(c.metrics || {})
+        .map(([k, v]) => '<div class="muted">' + k + ':' + v + '</div>').join('');
+      el.innerHTML = '<div class="num" style="font-size:15px">' + c.title
+        + ' <span class="pill ' + (PILL[c.state] || 'empty') + '">' + c.state + '</span></div>'
+        + '<div class="label">' + c.conclusion + '</div>' + metrics
+        + '<div style="margin-top:8px"><a class="act" href="' + (ENTRY[c.key] || '/') + '">进入</a></div>';
+      box.appendChild(el);
+    });
+  } catch (e) {
+    toast('聚合读数失败:' + e.message, true);
+  }
+}
+refresh();
+</script>
+</body>
+</html>

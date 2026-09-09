@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识库录入 · 喵喵优选后台</title>
+<link rel="stylesheet" href="/static/acceptance.css">
+</head>
+<body class="acceptance" data-admin-nav-anchor="wrap">
+<div class="acceptance-wrap" id="wrap">
+
+  <!-- 顶栏 + 库存闸条 -->
+  <div class="card">
+    <h2>知识库录入 <span class="hint">切块与双写只有一份实现,页面和 make 走同一条路</span></h2>
+    <div class="gatebar" id="gates">
+      <div class="gate"><div class="num" id="g-total">–</div><div class="label">知识块数</div></div>
+      <div class="gate"><div class="num" id="g-pending">–</div><div class="label">待向量化(pending)</div></div>
+      <div class="gate"><div class="num" id="g-milvus">–</div><div class="label">Milvus 条数</div></div>
+      <div class="gate"><div class="num" id="g-key">–</div><div class="label">关键条款数</div></div>
+      <div class="gate"><div class="num"><span class="pill empty" id="g-consistent">…</span></div><div class="label">双写是否一致</div></div>
+    </div>
+  </div>
+
+  <!-- ① 手工录入 -->
+  <div class="card">
+    <h2>① 手工录入 <span class="hint">贴一段 Markdown → 预览(dry-run)→ 入库</span></h2>
+    <div class="btnrow" style="margin-bottom:8px">
+      <select class="bin" id="m-type" style="width:140px"></select>
+      <label class="chk"><input type="checkbox" id="m-vectorize" checked> 入库后顺手向量化</label>
+      <button class="act" id="m-sample">填一段示例</button>
+    </div>
+    <textarea class="bin" id="m-text" rows="8" placeholder="# 标题&#10;&#10;## 小节标题&#10;&#10;正文……(支持表格)"></textarea>
+    <div class="btnrow" style="margin-top:8px">
+      <button class="act" id="m-preview">切块预览</button>
+      <button class="act primary" id="m-ingest">录入入库</button>
+    </div>
+    <div id="m-out"></div>
+  </div>
+
+  <!-- ② 建库材料 -->
+  <div class="card">
+    <h2>② 建库材料 <span class="hint">data/kb/*.md,CLI 与页面同读 sources.py 一份清单</span></h2>
+    <table class="grid" id="src-table">
+      <thead><tr><th>文件</th><th>content_type</th><th>在</th><th>操作</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="btnrow" style="margin-top:8px">
+      <button class="act" data-job="kb-preview">重跑 材料清单与切块预览</button>
+      <button class="act" data-job="kb-build">重跑 离线建库</button>
+    </div>
+    <div class="logwin" data-log="kb-preview" style="margin-top:8px"></div>
+    <div class="logwin" data-log="kb-build" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ③ 对话挖知识 -->
+  <div class="card">
+    <h2>③ 对话挖知识 <span class="hint">历史对话 → LLM 抽问答对 → 暂存表 → 去重</span></h2>
+    <div class="btnrow">
+      <span class="pill empty" id="st-extracted">抽出 –</span>
+      <span class="pill todo" id="st-kept">保留 –</span>
+      <span class="pill bad" id="st-discarded">丢弃 –</span>
+      <button class="act" data-job="seed-conv">重跑 灌历史会话种子</button>
+      <button class="act" data-job="kb-mine" data-heavy="1">重跑 对话挖知识</button>
+      <button class="act" id="st-show">看暂存表逐条</button>
+    </div>
+    <div class="logwin" data-log="seed-conv" style="margin-top:8px"></div>
+    <div class="logwin" data-log="kb-mine" style="margin-top:8px"></div>
+    <div id="st-items"></div>
+  </div>
+
+  <!-- ④ 向量化与双写 -->
+  <div class="card">
+    <h2>④ 向量化与双写 <span class="hint">MySQL 权威源,Milvus 按 id upsert,崩了重跑只捡 pending</span></h2>
+    <div class="btnrow">
+      <span>pending <b id="v-pending">–</b></span>
+      <span>done <b id="v-done">–</b></span>
+      <span>Milvus <b id="v-milvus">–</b></span>
+      <button class="act primary" id="v-run">向量化待补块</button>
+      <button class="act" data-job="kb-vectorize">重跑 向量化</button>
+      <button class="act" data-job="kb-reset" data-heavy="1">重跑 清库重建</button>
+    </div>
+    <div class="logwin" data-log="kb-vectorize" style="margin-top:8px"></div>
+    <div class="logwin" data-log="kb-reset" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ⑤ 检索自测 -->
+  <div class="card">
+    <h2>⑤ 检索自测 <span class="hint">dense 向量单路,Top-K 看分数</span></h2>
+    <div class="btnrow" style="margin-bottom:8px">
+      <input class="bin" id="s-q" style="flex:1" placeholder="换个说法问,比如:邮费是多少">
+      <select class="bin" id="s-route" style="width:170px"><option>dense 向量单路</option></select>
+      <select class="bin" id="s-k" style="width:90px">
+        <option value="3" selected>Top 3</option><option value="5">Top 5</option><option value="10">Top 10</option>
+      </select>
+      <button class="act primary" id="s-run">检索</button>
+    </div>
+    <div class="btnrow" id="s-presets"></div>
+    <div id="s-out"></div>
+  </div>
+
+  <!-- ⑥ 最近入库 -->
+  <div class="card">
+    <h2>⑥ 最近入库 <span class="hint">按 id 倒序,看最近入库的块与它们的状态</span></h2>
+    <table class="grid" id="recent-table">
+      <thead><tr><th>id</th><th>问法</th><th>正文</th><th>类型</th><th>关键</th><th>状态</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+</div>
+<script src="/static/acceptance.js"></script>
+<script src="/static/admin.js"></script>
+<script>
+mountAdminNav('kb');
+const { api, toast, bindJob, paintLog, repaintCachedLogs } = window.acceptance;
+
+const SAMPLE = '# 退货政策\n\n## 运费说明\n\n单笔订单满99元包邮,未满收取10元运费。偏远地区另计。\n\n## 保修期限\n\n电子类商品保修12个月。';
+const PRESETS = ['邮费是多少', '快递费怎么收', '多久能发货', '东西不想要了能退吗', '怎么开发票'];
+
+function pillOf(v) {
+  if (v === null || v === undefined) return ['empty', '读不到'];
+  return v ? ['ok', '一致'] : ['bad', '对不上'];
+}
+
+async function refreshAll() {
+  try {
+    const ov = await api('GET', '/api/kb/overview');
+    const st = ov.stats;
+    document.getElementById('g-total').textContent = st ? st.total : '–';
+    document.getElementById('g-pending').textContent = st ? st.pending : '–';
+    document.getElementById('g-milvus').textContent = ov.milvus_count === null ? '–' : ov.milvus_count;
+    document.getElementById('g-key').textContent = st ? st.key_clauses : '–';
+    const [cls, txt] = pillOf(ov.consistent);
+    const cp = document.getElementById('g-consistent');
+    cp.className = 'pill ' + cls; cp.textContent = txt;
+    // ④ 区三个数
+    document.getElementById('v-pending').textContent = st ? st.pending : '–';
+    document.getElementById('v-done').textContent = st ? st.done : '–';
+    document.getElementById('v-milvus').textContent = ov.milvus_count === null ? '–' : ov.milvus_count;
+    // ③ 暂存三态
+    const sg = ov.staging || { extracted: null, kept: null, discarded: null };
+    const setPill = (id, v) => { const el = document.getElementById(id); el.textContent = el.textContent.replace(/–|\d+/, v === null ? '–' : v); };
+    setPill('st-extracted', sg.extracted); setPill('st-kept', sg.kept); setPill('st-discarded', sg.discarded);
+    // ② 材料表
+    const tb = document.querySelector('#src-table tbody');
+    tb.innerHTML = '';
+    (ov.sources || []).forEach((s) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="mono">' + s.file + '</td><td>' + s.content_type + '</td>'
+        + '<td>' + (s.exists ? '✓' : '✗') + '</td><td><button class="act" data-f="' + s.file + '">看切块</button></td>';
+      tr.querySelector('button').addEventListener('click', () => previewFile(s.file, s.content_type));
+      tb.appendChild(tr);
+    });
+    // content_type 下拉
+    const sel = document.getElementById('m-type');
+    if (!sel.options.length) (ov.content_types || []).forEach((t) => {
+      const o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o);
+    });
+  } catch (e) { toast('取数失败:' + e.message, true); }
+
+  try {
+    const rec = await api('GET', '/api/kb/recent');
+    const tb = document.querySelector('#recent-table tbody');
+    tb.innerHTML = '';
+    rec.items.forEach((r) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + r.id + '</td><td>' + esc(r.questions) + '</td>'
+        + '<td class="muted">' + esc(r.answer.slice(0, 40)) + (r.answer.length > 40 ? '…' : '') + '</td>'
+        + '<td>' + r.content_type + '</td><td>' + (r.is_key_clause ? '★' : '') + '</td>'
+        + '<td><span class="pill ' + (r.vectorize_status === 'done' ? 'ok' : 'todo') + '">' + r.vectorize_status + '</span></td>';
+      tb.appendChild(tr);
+    });
+  } catch (e) { /* 库没起就空着 */ }
+  repaintCachedLogs();
+}
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function renderPreview(out, data) {
+  const f = data.flags || {};
+  let html = '<p class="muted">共 ' + data.total + ' 块 · 表格按行拆:'
+    + (f.table_rows_split ? '触发' : '未触发') + ' · 超长递归切:' + (f.long_text_split ? '触发' : '未触发') + '</p>';
+  (data.blocks || []).forEach((b) => {
+    html += '<div class="chunk"><div class="meta">'
+      + '<span class="tag">' + esc(b.section_path) + '</span>'
+      + '<span class="tag">' + b.chars + ' 字</span>'
+      + (b.is_key_clause ? '<span class="tag key">关键条款</span>' : '')
+      + (b.is_table ? '<span class="tag tab">表格块</span>' : '')
+      + (b.duplicate ? '<span class="tag dup">重复</span>' : '<span class="tag">无重复,可入库</span>')
+      + '</div><div class="muted">问法:' + esc(b.questions) + '</div>'
+      + '<pre class="body">' + esc(b.answer) + '</pre></div>';
+  });
+  out.innerHTML = html;
+}
+
+async function previewFile(file, ctype) {
+  const out = document.getElementById('m-out');
+  try {
+    const data = await api('POST', '/api/kb/preview', { content_type: ctype, file });
+    renderPreview(out, data);
+  } catch (e) { toast('预览失败:' + e.message, true); }
+}
+
+document.getElementById('m-sample').addEventListener('click', () => {
+  document.getElementById('m-text').value = SAMPLE;
+});
+document.getElementById('m-preview').addEventListener('click', async () => {
+  const out = document.getElementById('m-out');
+  try {
+    const data = await api('POST', '/api/kb/preview', {
+      content_type: document.getElementById('m-type').value,
+      content: document.getElementById('m-text').value,
+    });
+    renderPreview(out, data);
+  } catch (e) { toast('预览失败:' + e.message, true); }
+});
+document.getElementById('m-ingest').addEventListener('click', async () => {
+  try {
+    const out = await api('POST', '/api/kb/ingest', {
+      content_type: document.getElementById('m-type').value,
+      content: document.getElementById('m-text').value,
+      vectorize: document.getElementById('m-vectorize').checked,
+    });
+    let msg = '入库 ' + out.inserted + ' 块,跳过重复 ' + out.skipped + ' 块';
+    if (out.vectorized !== undefined) msg += ',向量化 ' + out.vectorized + ' 块';
+    toast(msg);
+    refreshAll();
+  } catch (e) { toast('录入失败:' + e.message, true); }
+});
+document.getElementById('v-run').addEventListener('click', async () => {
+  try {
+    const out = await api('POST', '/api/kb/vectorize');
+    toast('向量化 ' + out.vectorized + ' 块');
+    refreshAll();
+  } catch (e) { toast('向量化失败:' + e.message, true); }
+});
+document.getElementById('st-show').addEventListener('click', async () => {
+  const box = document.getElementById('st-items');
+  try {
+    const data = await api('GET', '/api/kb/staging');
+    box.innerHTML = '<table class="grid"><thead><tr><th>id</th><th>状态</th><th>问法</th><th>回答</th><th>来源</th></tr></thead><tbody>'
+      + data.items.map((i) => '<tr><td>' + i.id + '</td><td><span class="pill ' + (i.status === 'kept' ? 'ok' : i.status === 'discarded' ? 'bad' : 'todo') + '">' + i.status + '</span></td>'
+        + '<td>' + esc(i.question) + '</td><td class="muted">' + esc(i.answer.slice(0, 60)) + '</td><td class="mono">' + esc(i.source_ref || '') + '</td></tr>').join('')
+      + '</tbody></table>';
+  } catch (e) { toast('暂存表读不到:' + e.message, true); }
+});
+document.getElementById('s-run').addEventListener('click', async () => {
+  const q = document.getElementById('s-q').value.trim();
+  if (!q) return;
+  const out = document.getElementById('s-out');
+  try {
+    const data = await api('POST', '/api/kb/search', { query: q, top_k: parseInt(document.getElementById('s-k').value, 10) });
+    out.innerHTML = data.hits.length
+      ? data.hits.map((h) => '<div class="chunk"><div class="meta"><span class="tag">id ' + h.id + '</span><span class="tag">score ' + h.score.toFixed(4) + '</span></div>'
+          + '<b>' + esc(h.question) + '</b><pre class="body">' + esc(h.answer) + '</pre></div>').join('')
+      : '<p class="muted">没有命中(全部低于阈值)。</p>';
+  } catch (e) { toast('检索失败:' + e.message, true); }
+});
+PRESETS.forEach((p) => {
+  const b = document.createElement('button');
+  b.className = 'act'; b.textContent = p;
+  b.addEventListener('click', () => { document.getElementById('s-q').value = p; document.getElementById('s-run').click(); });
+  document.getElementById('s-presets').appendChild(b);
+});
+
+bindJob();
+document.addEventListener('job-done', (ev) => refreshAll());
+refreshAll();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import pathlib
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.agent import router as agent_router
@@ -18,6 +19,22 @@ app.include_router(kb_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)
 
-# 聊天页(原生 JS + SSE),挂根路径,/api/* 由上面的 router 优先接管
+# ch03 后台页面:各页保持原路径(路由必须先于根路径 StaticFiles 挂载注册,否则被吞)
 _STATIC = pathlib.Path(__file__).resolve().parent / "static"
+
+
+@app.get("/kb")
+async def kb_page():
+    return FileResponse(_STATIC / "kb.html")
+
+
+@app.get("/admin")
+async def admin_page():
+    return FileResponse(_STATIC / "admin.html")
+
+
+# ch03:后台共用静态资源挂 /static(页面里引 /static/admin.js 等)。
+# 注意挂载顺序:/static 先于根路径 catch-all,否则永远轮不到它。
+app.mount("/static", StaticFiles(directory=_STATIC), name="static-files")
+# 聊天页(原生 JS + SSE),挂根路径,/api/* 与上面的页面路由优先接管
 app.mount("/", StaticFiles(directory=_STATIC, html=True), name="static")

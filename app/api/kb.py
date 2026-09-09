@@ -181,6 +181,19 @@ async def search(req: SearchReq) -> dict:
     return {"hits": hits}
 
 
+@router.get("/recent")
+async def recent(limit: int = 20) -> dict:
+    try:
+        rows = await repository.list_recent_chunks(limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"知识表读不到:{e}")
+    return {"items": [{
+        "id": r.id, "category": r.category, "questions": r.questions,
+        "answer": r.answer, "content_type": r.content_type,
+        "is_key_clause": bool(r.is_key_clause), "vectorize_status": r.vectorize_status,
+    } for r in rows]}
+
+
 @router.get("/staging")
 async def staging(status: str | None = None) -> dict:
     try:

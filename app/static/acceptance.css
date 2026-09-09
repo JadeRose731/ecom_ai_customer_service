@@ -1,0 +1,63 @@
+/* acceptance.css · 后台共用外壳(配色 / 闸条 / 表格 / 作业按钮与日志窗口)
+   ch03 起由 kb、admin 页共用;与 index.html 的内联样式不冲突。 */
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2430; --muted: #8a93a6;
+  --brand: #ff7a45; --brand-soft: #fff1ea; --line: #e6e9f0;
+  --ok: #16a34a; --warn: #d97706; --bad: #d03050; --idle: #94a3b8;
+}
+body.acceptance { background: var(--bg); color: var(--ink); font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+.acceptance-wrap { max-width: 1060px; margin: 18px auto 40px; padding: 0 14px; display: flex; flex-direction: column; gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.card h2 { font-size: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.card h2 .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
+.muted { color: var(--muted); }
+.mono { font-family: Consolas, monospace; font-size: 13px; }
+
+/* 闸条(关键读数一排摆) */
+.gatebar { display: flex; flex-wrap: wrap; gap: 10px; }
+.gate { flex: 1 1 150px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.gate .num { font-size: 22px; font-weight: 700; }
+.gate .label { color: var(--muted); font-size: 12px; }
+
+/* 状态药丸 */
+.pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; border: 1px solid; }
+.pill.ok   { color: var(--ok);   border-color: var(--ok);   background: #f0fdf4; }
+.pill.todo { color: var(--warn); border-color: var(--warn); background: #fffbeb; }
+.pill.empty{ color: var(--idle); border-color: var(--idle); background: #f8fafc; }
+.pill.bad  { color: var(--bad);  border-color: var(--bad);  background: #fef2f2; }
+
+/* 表格 */
+table.grid { width: 100%; border-collapse: collapse; }
+table.grid th, table.grid td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; font-size: 13px; }
+table.grid th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+
+/* 按钮 */
+button.act, a.act { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; text-decoration: none; display: inline-block; }
+button.act:hover, a.act:hover { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+button.act.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+button.act.primary:hover { opacity: .9; color: #fff; }
+button.act:disabled { opacity: .5; cursor: not-allowed; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* 表单 */
+textarea.bin, input.bin, select.bin { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; }
+textarea.bin:focus, input.bin:focus, select.bin:focus { border-color: var(--brand); }
+label.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+
+/* 作业日志窗口 */
+.logwin { background: #0f172a; color: #d7e0ee; font-family: Consolas, monospace; font-size: 12px; line-height: 1.5; border-radius: 10px; padding: 10px 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+.logwin:empty::before { content: "（暂无日志:按上面的作业按钮跑一次)"; color: #64748b; }
+
+/* toast */
+#toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 99; display: flex; flex-direction: column; gap: 8px; }
+#toast .t { background: #1f2430; color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 13px; box-shadow: 0 6px 20px rgba(31,36,48,.25); }
+#toast .t.err { background: var(--bad); }
+
+/* 预览块 */
+.chunk { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+.chunk .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.chunk .tag { font-size: 12px; border-radius: 999px; padding: 0 8px; border: 1px solid var(--line); color: var(--muted); }
+.chunk .tag.key { color: var(--warn); border-color: var(--warn); }
+.chunk .tag.dup { color: var(--bad); border-color: var(--bad); }
+.chunk .tag.tab { color: #2563eb; border-color: #2563eb; }
+.chunk pre.body { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
