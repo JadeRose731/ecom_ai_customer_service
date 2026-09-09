@@ -27,8 +27,8 @@ def _batches(items: list, size: int):
         yield items[i:i + size]
 
 
-async def vectorize_pending(client, batch_size: int = 64) -> int:
-    """幂等可重跑:取 pending → 拼 category+questions+answer 向量化 → Milvus upsert(PK=id)
+async def vectorize_pending(client, batch_size: int = 64, collection: str = "knowledge") -> int:
+    """幂等可重跑:取 pending → 拼 category+questions+answer → 嵌入 + BM25 text → Milvus upsert(PK=id)
     → 回填 vector_id、status=done。崩在任意批,重跑只捡剩余 pending(Milvus 按 id upsert 无重)。"""
     pending = await repository.list_pending_chunks()
     done = 0
@@ -36,11 +36,16 @@ async def vectorize_pending(client, batch_size: int = 64) -> int:
         texts = [f"{r.category}\n{r.questions}\n{r.answer}" for r in batch]
         vectors = await embeddings.embed_texts(texts)
         rows = [
-            {"id": r.id, "vector": v, "question": r.questions, "answer": r.answer}
-            for r, v in zip(batch, vectors)
+            {"id": r.id, "dense": v, "text": t,
+             "question": r.questions, "answer": r.answer,
+             "section_path": r.section_path or "", "content_type": r.content_type or "",
+             "category": r.category or ""}
+            for r, v, t in zip(batch, vectors, texts)
         ]
-        milvus_client.upsert_vectors(client, rows)
+        milvus_client.upsert_vectors(client, rows, collection=collection)
         for r in batch:
             await repository.mark_chunk_vectorized(r.id, str(r.id))
         done += len(batch)
+    if done:
+        milvus_client.flush(client, collection=collection)  # 刷盘,数据方可被 BM25 检索
     return done

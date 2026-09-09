@@ -46,10 +46,11 @@ async def _test_engine():
 
 @pytest.fixture()
 def milvus():
-    """真实向量库(Docker Milvus Standalone,Lite 无 Windows 包):每用例 drop/重建集合。"""
+    """真实向量库(Docker Milvus Standalone):每用例 drop/重建集合。
+    走非单例客户端(uri 传参),ensure 不吃进程内缓存——drop 后重建才会真正执行。"""
     from app.kb import milvus_client as mc
 
-    c = mc.get_client()
+    c = mc.get_client(uri=settings.milvus_uri)
     if c.has_collection(mc.COLLECTION):
         c.drop_collection(mc.COLLECTION)
     mc.ensure_collection(c)

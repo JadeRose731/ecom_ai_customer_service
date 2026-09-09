@@ -1,21 +1,24 @@
-# 计划夹具用临时 Milvus Lite 文件;Windows 无 Lite,改用 conftest 的 Docker Standalone 夹具
+# 计划夹具用临时 Milvus Lite 文件;Windows 无 Lite,改用 Docker Standalone(非单例客户端,见 conftest)
 import pytest
 
+from app.config import settings
 from app.core import retrieval
 from app.kb import milvus_client
 
 
 @pytest.fixture()
 def milvus():
-    c = milvus_client.get_client()
+    c = milvus_client.get_client(uri=settings.milvus_uri)
     if c.has_collection(milvus_client.COLLECTION):
         c.drop_collection(milvus_client.COLLECTION)
     milvus_client.ensure_collection(c)
     v_hit = [1.0, 0.0, 1.0] + [0.0] * (milvus_client.DIM - 3)
     v_other = [0.0, 1.0, 0.0] + [0.0] * (milvus_client.DIM - 3)
     milvus_client.upsert_vectors(c, [
-        {"id": 1, "vector": v_hit, "question": "运费怎么算", "answer": "满99包邮"},
-        {"id": 2, "vector": v_other, "question": "发货时效", "answer": "48小时"},
+        {"id": 1, "dense": v_hit, "text": "运费怎么算 满99包邮", "question": "运费怎么算", "answer": "满99包邮",
+         "section_path": "p", "content_type": "faq", "category": "c"},
+        {"id": 2, "dense": v_other, "text": "发货时效 48小时", "question": "发货时效", "answer": "48小时",
+         "section_path": "p", "content_type": "faq", "category": "c"},
     ])
     c.flush(milvus_client.COLLECTION)
     yield c
