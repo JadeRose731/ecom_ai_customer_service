@@ -1,61 +1,79 @@
+# tests/test_chat_api.py — ch02 新契约:/api/chat 升级为带工具链的 SSE 流式主入口
 import json
 
-from fastapi.testclient import TestClient
-from langchain_core.language_models import FakeListChatModel
+import httpx
+import pytest
+from langchain_core.messages import AIMessage
 
 from app.api import chat as chat_api
+from app.db import repository as repo
 from app.main import app
+from tests.test_agent_orchestration import FakeModel
 
-def make_client(responses: list[str]) -> TestClient:
-    fake = FakeListChatModel(responses=responses)
-    app.dependency_overrides[chat_api.get_model] = lambda: fake
-    return TestClient(app)
+def make_client(model: FakeModel) -> httpx.AsyncClient:
+    app.dependency_overrides[chat_api.get_model] = lambda: model
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
-def collect_sse(resp) -> tuple[list[str], str]:
-    """返回 (delta 列表, 终止帧)。"""
-    deltas, last = [], ""
-    for line in resp.iter_lines():
-        if not line.startswith("data: "):
-            continue
-        payload = line[len("data: "):]
-        if payload == "[DONE]":
-            last = payload
-        else:
-            deltas.append(json.loads(payload)["delta"])
-    return deltas, last
+async def read_sse(client, payload: dict):
+    """返回 (事件列表, 是否出现 [DONE])。事件不含 [DONE] 终止帧。"""
+    events, done = [], False
+    async with client.stream("POST", "/api/chat", json=payload) as resp:
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        async for line in resp.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            payload_str = line[len("data: "):]
+            if payload_str == "[DONE]":
+                done = True
+            else:
+                events.append(json.loads(payload_str))
+    return events, done
 
 def teardown_function():
     app.dependency_overrides.clear()
-    chat_api.store._sessions.clear()
 
-def test_chat_streams_tokens_and_done():
-    client = make_client(["你好呀"])
-    with client.stream(
-        "POST", "/api/chat", json={"session_id": "s1", "message": "在吗"}
-    ) as resp:
-        assert resp.status_code == 200
-        assert resp.headers["content-type"].startswith("text/event-stream")
-        deltas, last = collect_sse(resp)
-    assert "".join(deltas) == "你好呀"
-    assert len(deltas) > 1  # 逐 token,不是一次性整段
-    assert last == "[DONE]"
+async def test_chat_with_tools_streams_frame_sequence(db_session_factory, db_clean):
+    first = AIMessage(content="", tool_calls=[
+        {"name": "query_logistics", "args": {"order_id": "1001"}, "id": "c1"}])
+    model = FakeModel([first], stream_tokens=["您的", "订单", "运输中"])
+    client = make_client(model)
+    events, done = await read_sse(client, {"user_id": "u1", "message": "订单 1001 到哪了"})
+    assert events[0] == {"event": "tool", "name": "query_logistics"}
+    deltas = [e["delta"] for e in events if "delta" in e]
+    assert "".join(deltas) == "您的订单运输中"
+    done_ev = [e for e in events if e.get("event") == "done"]
+    assert len(done_ev) == 1 and isinstance(done_ev[0]["conversation_id"], int)
+    assert done
+    msgs = await repo.list_messages(done_ev[0]["conversation_id"])
+    assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
 
-def test_chat_persists_history_for_next_turn():
-    client = make_client(["第一轮答", "第二轮答"])
-    with client.stream(
-        "POST", "/api/chat", json={"session_id": "s2", "message": "第一问"}
-    ) as r:
-        collect_sse(r)
-    with client.stream(
-        "POST", "/api/chat", json={"session_id": "s2", "message": "第二问"}
-    ) as r:
-        collect_sse(r)
-    history = chat_api.store.get("s2")
-    assert [m.content for m in history] == ["第一问", "第一轮答", "第二问", "第二轮答"]
+async def test_chat_no_tool_direct_answer(db_session_factory, db_clean):
+    model = FakeModel([AIMessage(content="你好,喵~")])
+    client = make_client(model)
+    events, done = await read_sse(client, {"user_id": "u1", "message": "你好"})
+    assert all("tool" not in e for e in events)
+    deltas = [e["delta"] for e in events if "delta" in e]
+    assert "".join(deltas) == "你好,喵~"
+    assert done
+    done_ev = [e for e in events if e.get("event") == "done"]
+    msgs = await repo.list_messages(done_ev[0]["conversation_id"])
+    assert [m.role for m in msgs] == ["user", "assistant"]
 
-def test_chat_validates_empty_message():
-    client = make_client(["x"])
-    assert (
-        client.post("/api/chat", json={"session_id": "s3", "message": ""}).status_code
-        == 422
-    )
+async def test_chat_unknown_conversation_emits_error_no_done(db_session_factory, db_clean):
+    model = FakeModel([AIMessage(content="hi")])
+    client = make_client(model)
+    lines = []
+    async with client.stream("POST", "/api/chat",
+                             json={"user_id": "u1", "message": "hi", "conversation_id": 999999}) as resp:
+        async for line in resp.aiter_lines():
+            lines.append(line)
+    assert "event: error" in lines
+    err = [json.loads(l[len("data: "):]) for l in lines if l.startswith("data: ") and l != "data: [DONE]"]
+    assert err and err[0]["message"] == "会话不存在"
+    assert "data: [DONE]" not in lines            # 错误流不带终止帧
+
+async def test_chat_empty_message_422(db_session_factory, db_clean):
+    client = make_client(FakeModel([AIMessage(content="x")]))
+    resp = await client.post("/api/chat", json={"user_id": "u1", "message": ""})
+    assert resp.status_code == 422                # 未进流

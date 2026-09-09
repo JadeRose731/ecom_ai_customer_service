@@ -1,5 +1,7 @@
+# app/schemas/chat.py
 from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
-    session_id: str = Field(min_length=1, description="会话 ID,同一会话多轮复用")
+    user_id: str = Field(min_length=1, description="用户标识,用于建/归属会话")
     message: str = Field(min_length=1, description="用户本轮消息")
+    conversation_id: int | None = Field(default=None, description="续接会话;为空则新建,由 done 帧回传")
