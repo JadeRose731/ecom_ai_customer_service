@@ -49,6 +49,25 @@
   .dots i:nth-child(3) { animation-delay: .4s; }
   @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
   .error { color: #d03050; font-size: 13px; }
+  /* ch04 可点引用角标 + 来源浮层 */
+  .cite { color: var(--brand); cursor: pointer; font-weight: 600; margin: 0 1px; user-select: none; }
+  .cite:hover { text-decoration: underline; }
+  #cite-panel { position: fixed; z-index: 50; max-width: 420px; background: #fff; border: 1px solid var(--line);
+                border-radius: 12px; box-shadow: 0 10px 34px rgba(31,36,48,.16); padding: 12px 14px;
+                display: none; font-size: 13px; }
+  #cite-panel.show { display: block; }
+  #cite-panel .cp-path { color: var(--brand); font-weight: 600; margin-bottom: 6px; }
+  #cite-panel .cp-q { font-weight: 600; margin-bottom: 4px; }
+  #cite-panel .cp-a { color: #4b5563; white-space: pre-wrap; }
+  #cite-panel .cp-empty { color: var(--muted); }
+  /* ch04 每段回答满意度反馈(一次性,不落库) */
+  .feedback { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .fb-btn { border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 8px;
+            padding: 3px 10px; cursor: pointer; box-shadow: 0 2px 0 var(--line); font-size: 12px; }
+  .fb-btn:active { transform: translateY(2px); box-shadow: none; }
+  .fb-btn.active { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+  .fb-btn.dim { opacity: .4; pointer-events: none; }
+  .fb-done { color: var(--muted); }
   footer { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; }
   #input { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
            font: inherit; outline: none; height: 44px; }
@@ -69,6 +88,7 @@
     <button onclick="location.href='/admin'">后台管理</button>
   </header>
   <div id="chat"></div>
+  <div id="cite-panel"></div>
   <footer>
     <textarea id="input" placeholder="输入消息,Enter 发送,Shift+Enter 换行"></textarea>
     <button id="send">发送</button>
@@ -118,7 +138,7 @@ function appendBotShell() {
   row.appendChild(wrap);
   chatEl.appendChild(row);
   scrollBottom();
-  return { tools, bubble, raw: '', firstDelta: false };
+  return { row, wrap, tools, bubble, raw: '', firstDelta: false, citations: [] };
 }
 
 function addBadge(shell, name) {
@@ -138,6 +158,61 @@ function firstDelta(shell) {
 
 function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
 
+/* ---------- ch04:来源浮层 + 满意度反馈 ---------- */
+function showCitePanel(x, y, item) {
+  const panel = document.getElementById('cite-panel');
+  if (!item) {
+    panel.innerHTML = '<div class="cp-empty">未找到该编号的引用</div>';
+  } else {
+    panel.innerHTML = '<div class="cp-path">📄 ' + esc(item.section_path || '(无章节路径)')
+      + '</div><div class="cp-q">' + esc(item.question || '') + '</div>'
+      + '<div class="cp-a">' + esc(item.answer || '') + '</div>';
+  }
+  panel.classList.add('show');
+  const r = panel.getBoundingClientRect();
+  panel.style.left = Math.min(x, window.innerWidth - r.width - 12) + 'px';
+  panel.style.top = Math.min(y + 12, window.innerHeight - r.height - 12) + 'px';
+}
+function hideCitePanel() { document.getElementById('cite-panel').classList.remove('show'); }
+
+// 气泡内容逐帧 innerHTML 重绘,角标监听用事件委托挂在 document 上
+document.addEventListener('click', (e) => {
+  const cite = e.target.closest('.cite');
+  if (cite) {
+    const bubble = cite.closest('.bubble');
+    const items = (bubble && bubble.citations) || [];
+    const item = items.find((it) => Number(it.n) === Number(cite.dataset.n));
+    showCitePanel(e.clientX, e.clientY, item);
+    e.stopPropagation();
+    return;
+  }
+  if (!e.target.closest('#cite-panel')) hideCitePanel();
+});
+
+function addFeedbackBar(shell) {
+  const bar = document.createElement('div');
+  bar.className = 'feedback';
+  const up = document.createElement('button');
+  up.className = 'fb-btn'; up.textContent = '👍 有帮助';
+  const down = document.createElement('button');
+  down.className = 'fb-btn'; down.textContent = '👎 没帮助';
+  const note = document.createElement('span');
+  bar.appendChild(up); bar.appendChild(down); bar.appendChild(note);
+  let locked = false;
+  const pick = (good, chosen, other) => () => {
+    if (locked) return;
+    locked = true;
+    chosen.classList.add('active');
+    other.classList.add('dim');
+    note.textContent = '已反馈';
+    // 纯前端一次性交互,不落库(反馈入问题池 source=user_feedback 归后续数据飞轮章)
+  };
+  up.addEventListener('click', pick(true, up, down));
+  down.addEventListener('click', pick(false, down, up));
+  shell.wrap.appendChild(bar);
+  scrollBottom();
+}
+
 /* ---------- 零依赖 markdown 渲染(先转义防注入,再逐帧重绘) ---------- */
 function esc(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -148,7 +223,9 @@ function inline(s) {
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/(?<!["'=])(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    .replace(/(?<!["'=])(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
+    // ch04:答案里的 [n] 编号 → 可点角标(点击弹出来源浮层)
+    .replace(/\[(\d{1,2})\]/g, '<sup class="cite" data-n="$1">[$1]</sup>');
 }
 function renderMarkdown(el, raw) {
   const lines = esc(raw).split('\n');
@@ -245,6 +322,10 @@ async function streamChat(message) {
       try { payload = JSON.parse(data); } catch (e) { return; }
       if (payload.event === 'tool') {
         addBadge(shell, payload.name);
+      } else if (payload.event === 'citations') {
+        // ch04:引用数据先挂到气泡上,citations 事件先于 delta 下发
+        shell.citations = payload.items || [];
+        shell.bubble.citations = shell.citations;
       } else if (payload.event === 'done') {
         conversationId = String(payload.conversation_id);
         localStorage.setItem(CID_KEY, conversationId);
@@ -265,6 +346,7 @@ async function streamChat(message) {
       }
     }
     if (!shell.firstDelta && !errorShown) shell.bubble.textContent = '…';
+    if (shell.firstDelta && !errorShown) addFeedbackBar(shell);
   } catch (err) {
     shell.bubble.classList.remove('md');
     shell.bubble.innerHTML = '<span class="error">⚠️ 网络异常,请稍后重试</span>';
