@@ -11,5 +11,12 @@ class Settings(BaseSettings):
     # 本机 3306 被 Windows 版 MySQL 占用,Docker MySQL 映射到 3307
     database_url: str = "mysql+asyncmy://root:root@localhost:3307/mewhelp"
     test_database_url: str = "mysql+asyncmy://root:root@localhost:3307/mewhelp_test"
+    # ch03 嵌入与向量检索
+    embed_base_url: str = "https://api.siliconflow.cn/v1"
+    embed_api_key: str                      # 跟着账号走,不给默认值
+    embed_model: str = "BAAI/bge-m3"        # 上游真实名,没有别名这一层
+    milvus_uri: str = "http://localhost:19530"
+    retrieval_top_k: int = 3
+    retrieval_min_score: float = 0.4
 
 settings = Settings()

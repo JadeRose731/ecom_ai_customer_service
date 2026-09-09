@@ -16,5 +16,30 @@ services:
       timeout: 3s
       retries: 20
 
+  # ch03:计划定的 Milvus Lite(嵌入式本地文件)无 Windows 包,经用户确认改跑
+  # Milvus Standalone(单容器 embedded etcd + 本地存储);pymilvus API 与 Lite 一致。
+  milvus:
+    image: milvusdb/milvus:v2.6.0
+    container_name: mewhelp-milvus
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
+      COMMON_STORAGETYPE: "local"
+    volumes:
+      - ./data/volumes/milvus:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
 volumes:
   mewhelp-mysql-data:
