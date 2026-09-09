@@ -3,12 +3,15 @@ name = "mewhelp"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "aiosqlite>=0.20",
     "asyncmy>=0.2.9",
     "cryptography>=50.0.1",
     "fastapi>=0.141.1",
     "langchain>=1.4.0",
     "langchain-openai>=1.6.1",
     "langchain-text-splitters>=1.1.2",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite>=2.0",
     "openai>=3.10.0",
     "pydantic-settings>=2.15.0",
     "pymilvus>=3.0.1",

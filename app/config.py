@@ -26,5 +26,9 @@ class Settings(BaseSettings):
     recall_top_k: int = 50
     rerank_top_k: int = 10
     rerank_min_score: float = 0.3
+    # ch05 图编排
+    max_agent_steps: int = 6              # ReAct 环最大步数(封顶,超则兜底)
+    # token 花销不在环里卡:那是成本控制,归 ch09 跟 Langfuse 的账一起看
+    checkpointer_db_path: str = "data/ch05_checkpoints.sqlite"  # LangGraph checkpointer(data/*.db* 已 gitignore)
 
 settings = Settings()
