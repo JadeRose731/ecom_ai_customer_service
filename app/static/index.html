@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>喵喵优选 · 智能客服小喵</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2430; --muted: #8a93a6;
+    --brand: #ff7a45; --brand-soft: #fff1ea; --line: #e6e9f0; --bubble-bot: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  .app { max-width: 760px; margin: 24px auto; height: calc(100vh - 48px); display: flex; flex-direction: column;
+         background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 6px 30px rgba(31,36,48,.06); }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  header .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 18px; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header button { margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--ink);
+                  padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  header button:hover { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+  #chat { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; }
+  .row.user { justify-content: flex-end; }
+  .bubble { max-width: 78%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-break: break-word; }
+  .row.user .bubble { background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }
+  .row.bot .bubble { background: var(--bubble-bot); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .row.bot { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .bubble-wrap { max-width: 78%; display: flex; flex-direction: column; gap: 6px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tool-badge { font-size: 12px; color: #6b7280; background: #f3f4f6; border: 1px dashed #c7ccd6;
+                border-radius: 999px; padding: 2px 10px; }
+  .md { white-space: normal; }
+  .md h1, .md h2, .md h3 { font-size: 14px; margin: 6px 0 2px; }
+  .md p { margin: 4px 0; }
+  .md ul, .md ol { margin: 4px 0 4px 18px; }
+  .md code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; font-family: Consolas, monospace; font-size: 13px; }
+  .md pre { background: #f3f4f6; border-radius: 8px; padding: 8px 10px; overflow-x: auto; margin: 6px 0; }
+  .md pre code { background: none; padding: 0; }
+  .md blockquote { border-left: 3px solid var(--line); color: var(--muted); padding-left: 10px; margin: 6px 0; }
+  .md table { border-collapse: collapse; margin: 6px 0; }
+  .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; }
+  .md a { color: var(--brand); }
+  .md hr { border: none; border-top: 1px solid var(--line); margin: 8px 0; }
+  .dots { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: #c2c8d4; animation: blink 1.2s infinite; }
+  .dots i:nth-child(2) { animation-delay: .2s; }
+  .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+  .error { color: #d03050; font-size: 13px; }
+  footer { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; }
+  #input { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+           font: inherit; outline: none; height: 44px; }
+  #input:focus { border-color: var(--brand); }
+  #send { border: none; background: var(--brand); color: #fff; border-radius: 10px; padding: 0 20px; cursor: pointer; }
+  #send:disabled { opacity: .5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">🐱</div>
+    <div>
+      <h1>喵喵优选 · 智能客服</h1>
+      <div class="sub">小喵为您服务,订单 / 物流 / 售后都可以问我</div>
+    </div>
+    <button id="newChat">+ 新对话</button>
+  </header>
+  <div id="chat"></div>
+  <footer>
+    <textarea id="input" placeholder="输入消息,Enter 发送,Shift+Enter 换行"></textarea>
+    <button id="send">发送</button>
+  </footer>
+</div>
+
+<script>
+const chatEl = document.getElementById('chat');
+const inputEl = document.getElementById('input');
+const sendEl = document.getElementById('send');
+const UID_KEY = 'mewhelp_user_id', CID_KEY = 'mewhelp_conversation_id';
+
+let userId = localStorage.getItem(UID_KEY);
+if (!userId) {
+  userId = 'u-' + Math.random().toString(36).slice(2, 10);
+  localStorage.setItem(UID_KEY, userId);
+}
+let conversationId = localStorage.getItem(CID_KEY);
+let sending = false;
+
+function appendUser(text) {
+  const row = document.createElement('div');
+  row.className = 'row user';
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.textContent = text;
+  row.appendChild(b);
+  chatEl.appendChild(row);
+  scrollBottom();
+}
+
+function appendBotShell() {
+  const row = document.createElement('div');
+  row.className = 'row bot';
+  const wrap = document.createElement('div');
+  wrap.className = 'bubble-wrap';
+  const tools = document.createElement('div');
+  tools.className = 'tools';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  const dots = document.createElement('span');
+  dots.className = 'dots';
+  dots.innerHTML = '<i></i><i></i><i></i>';
+  bubble.appendChild(dots);
+  wrap.appendChild(tools);
+  wrap.appendChild(bubble);
+  row.appendChild(wrap);
+  chatEl.appendChild(row);
+  scrollBottom();
+  return { tools, bubble, raw: '', firstDelta: false };
+}
+
+function addBadge(shell, name) {
+  const badge = document.createElement('span');
+  badge.className = 'tool-badge';
+  badge.textContent = '🔧 调用了 ' + name;
+  shell.tools.appendChild(badge);
+  scrollBottom();
+}
+
+function firstDelta(shell) {
+  if (shell.firstDelta) return;
+  shell.firstDelta = true;
+  shell.bubble.classList.add('md');
+  shell.bubble.textContent = '';
+}
+
+function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
+
+/* ---------- 零依赖 markdown 渲染(先转义防注入,再逐帧重绘) ---------- */
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function inline(s) {
+  return s
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/(?<!["'=])(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+function renderMarkdown(el, raw) {
+  const lines = esc(raw).split('\n');
+  let html = '', i = 0;
+  const isTableSep = (l) => /^\s*\|(\s*:?-{3,}:?\s*\|)+\s*$/.test(l);
+  const cells = (l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      const buf = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++;
+      html += '<pre><code>' + buf.join('\n') + '</code></pre>';
+      continue;
+    }
+    if (/^\s*$/.test(line)) { i++; continue; }
+    if (/^\s*(---+|\*\*\*+)\s*$/.test(line)) { html += '<hr>'; i++; continue; }
+    const h = line.match(/^(#{1,3})\s+(.*)/);
+    if (h) { html += '<h' + h[1].length + '>' + inline(h[2]) + '</h' + h[1].length + '>'; i++; continue; }
+    if (/^\s*>\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^\s*>\s?/, '')); i++; }
+      html += '<blockquote>' + inline(buf.join(' ')) + '</blockquote>';
+      continue;
+    }
+    if (line.includes('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+      const head = cells(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|') && !/^\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
+      html += '<table><tr>' + head.map((c) => '<th>' + inline(c) + '</th>').join('') + '</tr>';
+      for (const r of rows) html += '<tr>' + r.map((c) => '<td>' + inline(c) + '</td>').join('') + '</tr>';
+      html += '</table>';
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { buf.push(lines[i].replace(/^\s*[-*]\s+/, '')); i++; }
+      html += '<ul>' + buf.map((t) => '<li>' + inline(t) + '</li>').join('') + '</ul>';
+      continue;
+    }
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) { buf.push(lines[i].replace(/^\s*\d+\.\s+/, '')); i++; }
+      html += '<ol>' + buf.map((t) => '<li>' + inline(t) + '</li>').join('') + '</ol>';
+      continue;
+    }
+    const buf = [line];
+    i++;
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,3}\s|```|\s*>|\s*[-*]\s|\s*\d+\.\s)/.test(lines[i])) { buf.push(lines[i]); i++; }
+    html += '<p>' + inline(buf.join('<br>')) + '</p>';
+  }
+  el.innerHTML = html;
+  scrollBottom();
+}
+
+/* ---------- SSE 流式 ---------- */
+async function streamChat(message) {
+  const shell = appendBotShell();
+  let errorShown = false;
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        message: message,
+        conversation_id: conversationId ? Number(conversationId) : null,
+      }),
+    });
+    if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const handleFrame = (frame) => {
+      let event = 'message';
+      const dataLines = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+      }
+      const data = dataLines.join('\n');
+      if (event === 'error') {
+        let msg = '服务暂时不可用,请稍后重试';
+        try { msg = JSON.parse(data).message; } catch (e) {}
+        shell.bubble.classList.remove('md');
+        shell.bubble.innerHTML = '<span class="error">⚠️ ' + esc(msg) + '</span>';
+        errorShown = true;
+        return;
+      }
+      if (!data || data === '[DONE]') return;
+      let payload;
+      try { payload = JSON.parse(data); } catch (e) { return; }
+      if (payload.event === 'tool') {
+        addBadge(shell, payload.name);
+      } else if (payload.event === 'done') {
+        conversationId = String(payload.conversation_id);
+        localStorage.setItem(CID_KEY, conversationId);
+      } else if (payload.delta !== undefined) {
+        shell.raw += payload.delta;
+        renderMarkdown(shell.bubble, shell.raw);
+      }
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const frame = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        if (frame.trim()) handleFrame(frame);
+      }
+    }
+    if (!shell.firstDelta && !errorShown) shell.bubble.textContent = '…';
+  } catch (err) {
+    shell.bubble.classList.remove('md');
+    shell.bubble.innerHTML = '<span class="error">⚠️ 网络异常,请稍后重试</span>';
+  }
+}
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || sending) return;
+  sending = true;
+  sendEl.disabled = true;
+  inputEl.value = '';
+  appendUser(text);
+  await streamChat(text);
+  sending = false;
+  sendEl.disabled = false;
+  inputEl.focus();
+}
+
+sendEl.addEventListener('click', send);
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+document.getElementById('newChat').addEventListener('click', () => {
+  conversationId = null;
+  localStorage.removeItem(CID_KEY);
+  chatEl.innerHTML = '';
+  inputEl.focus();
+});
+inputEl.focus();
+</script>
+</body>
+</html>
