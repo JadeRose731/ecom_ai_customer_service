@@ -100,6 +100,23 @@ uv run uvicorn app.main:app --port 8000   # 起应用,/kb 建库、/admin 看板
 - **单测**(93 个;Milvus 走 Docker Standalone 真连,嵌入 mock 不打真实上游):`uv run pytest`。
 - **验收入口**:聊天页问「邮费是多少」→ query_faq 徽章 + 包邮答案(换说法召回);`/kb` ⑤ 检索自测看 Top-K 分数;④ 区演示中断重跑(闸条三个数就是账)。
 
+## ch04:混合检索 + 重排 + 评估体系
+
+`query_faq` 升级为完整 RAG 管线:Query 理解(改写+同义词扩展)→ Milvus 原生 BM25 + dense `hybrid_search`(RRF 融合,Top-50 召回)→ bge-reranker-v2-m3 精排(Top-10)→ 两道证据闸(机械:最高 rerank 分 < 0.3 判检索低置信;语义:结构化自评判证据不够)→ 首尾组装编号证据 → 拒答/落池。证据走 SSE `citations` 事件下发,聊天页 `[n]` 渲染成可点角标(浮层看 section_path + 原文),每段回答带 👍/👎 一次性反馈;两道闸都拦下的题进 `low_confidence_questions` 问题池(`retrieval_low_conf` / `self_check`)。
+
+评估体系四策略(`vector` / `bm25` / `hybrid` / `hybrid_rerank`)对照,评估的就是线上的——全部走同一个 `search_knowledge(strategy=...)`:80 题四桶评估集(A 政策 / B 型号易混族 / C 口语 / D 库外应有拒答),三段报告(检索 Recall@10/MRR + 证据覆盖度确定性机械匹配;生成段答案覆盖度/忠实度/拒答率带超时与单点隔离,上游挂了 generation=null 照样落盘)。
+
+```bash
+make milvus-up             # Milvus 三容器(healthz 就绪门)
+make kb-build && make kb-vectorize   # 44 块语料(faq/policy/manual/spec 四源,含易混型号族)
+make eval-rag              # 四策略三段报告 → data/ch04/reports/rag_eval.{txt,json}
+                           #   无 key 阶段可 EVAL_STRATEGIES=bm25 只跑确定性 BM25 行
+uv run uvicorn app.main:app --port 8000   # /rag-eval 看报告 + 重跑;/ 聊天页引用角标
+```
+
+- **单测**(121 个):`uv run pytest`(Milvus Standalone 真连;LLM/嵌入/重排 mock)。
+- **验收入口**:`/rag-eval` 报告页(KPI/分组柱状图/读图句/汇总表 best 行底色)与终端 `make eval-rag` 同一份产物;`/admin` 第五张卡看最佳 MRR。
+
 ## 技术栈
 
 - **后端**:Python 3.12、FastAPI、LangChain / LangGraph、SQLAlchemy 2.0(异步)、uv
