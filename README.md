@@ -8,7 +8,7 @@
 |------|------|----------|
 | [ch01](ch01/) | 纯对话 | FastAPI + LangChain 多轮对话、SSE 流式逐 token 输出、PromptTemplate 管理、结构化售后提取(`with_structured_output`)、历史裁剪与 token 预算 |
 | [ch02](ch02/) | Function Calling 工具链 | `@tool` 内置工具(查物流/查订单/查 FAQ)、单轮工具调用、会话消息落库、聊天页工具轨迹徽章 |
-| [ch03](ch03/) | RAG 知识库 | Markdown 结构感知切分、对话挖知识离线批处理、BGE-M3 嵌入、Milvus Lite dense 单路检索 |
+| [ch03](ch03/) | RAG 知识库 | Markdown 结构感知切分、对话挖知识离线批处理、BGE-M3 嵌入、Milvus Standalone dense 单路检索、`/kb` 浏览器建库 |
 | [ch04](ch04/) | 混合检索 + 重排 + 评估 | Milvus Standalone 原生 BM25 + dense 混合检索(RRF)、bge-reranker-v2-m3 重排、Query 理解、带引用/拒答/自评落池、四策略评估体系、👍/👎 满意度反馈 |
 | [ch05](ch05/) | Workflow + Agent 混合架构 | LangGraph 确定性骨架(指代消解 → 意图识别 → 分流 → 置信度兜底)+ ReAct 主力 Agent |
 | [ch06](ch06/) | 意图识别与对话管理 | 指代消解 + Query 改写、多查询扩写、八类意图 + 置信度、「其他」兜底、退款售后确定性子流程、订单选择器 |
@@ -82,6 +82,23 @@ uv run uvicorn app.main:app --port 8000   # 起应用
 - **程序化出口**:`curl -s http://localhost:8000/api/agent -H 'Content-Type: application/json' -d '{"user_id":"u1","message":"订单 1001 的物流到哪了"}'`,或 `./scripts/demo_agent.sh`。
 - **标注样例评估**(7 条,核对选工具):`make eval-agent`。
 - **单测**(51 个,Fake 模型不打真实上游):`uv run pytest`。
+
+## ch03:RAG 知识库(向量语义检索)
+
+`query_faq` 从关键词查表升级为 BGE-M3 向量检索(契约不变:命中 `{"hits":[{question,answer}]}`,未命中 `{"hits":[],"message":…}`)。文档结构感知切块(标题切 / 递归切 / 句末重叠 / 大表格按行切复制表头)与对话挖知识两条离线链路写 MySQL `knowledge_chunks`(pending),幂等 vectorize job 取 pending → 嵌入 → Milvus `knowledge` 集合(按 id upsert,崩了重跑只捡剩余 pending)→ 回填 done;在线检索直接从 Milvus 取 Top-K。浏览器建库:`/kb` 录入页(预览 dry-run / 录入按指纹幂等 / 向量化 / 检索自测),`/admin` 聚合首页。
+
+```bash
+docker compose up -d      # MySQL + Milvus 三容器(etcd / minio / standalone,2.6 起官方移除 embedded etcd)
+make kb-build             # data/kb/*.md → 切块 → knowledge_chunks(pending)
+make kb-vectorize         # pending → 嵌入(需 EMBED_API_KEY)→ Milvus → done(幂等可重跑)
+make seed-conv            # 灌合成历史对话(喂挖知识)
+make kb-mine              # 对话 → LLM 抽问答对(需聊天上游)→ 暂存表 → 去重 → pending
+make eval-retrieval       # 验收:5 条换说法召回,≥4/5(需真实嵌入)
+uv run uvicorn app.main:app --port 8000   # 起应用,/kb 建库、/admin 看板
+```
+
+- **单测**(93 个;Milvus 走 Docker Standalone 真连,嵌入 mock 不打真实上游):`uv run pytest`。
+- **验收入口**:聊天页问「邮费是多少」→ query_faq 徽章 + 包邮答案(换说法召回);`/kb` ⑤ 检索自测看 Top-K 分数;④ 区演示中断重跑(闸条三个数就是账)。
 
 ## 技术栈
 
