@@ -150,3 +150,30 @@ async def agent_tools(state) -> dict:
     if actions:
         out["suggested_actions"] = actions
     return out
+
+
+def resolve_answer(state) -> str:
+    """最终答复:确定性节点写在 state['answer'];Agent 答复取最后一条 AIMessage 文本。"""
+    if state.get("answer"):
+        return state["answer"]
+    for m in reversed(state.get("messages", [])):
+        if isinstance(m, AIMessage):
+            content = m.content
+            if isinstance(content, str):
+                return content
+            return "".join(p.get("text", "") for p in content if isinstance(p, dict))
+    return ""
+
+
+async def log_node(state) -> dict:
+    """日志记录:留痕 intent/route/trace(可观测地基),并落 MySQL 一条 assistant 消息(审计)。"""
+    logger.info(
+        "ch05 turn conv=%s intent=%s route=%s trace=%s",
+        state.get("conversation_id"), state.get("intent"), state.get("route"),
+        state.get("trace", {}),
+    )
+    answer = resolve_answer(state)
+    if state.get("conversation_id"):
+        await repository.append_message(state["conversation_id"], "assistant",
+                                        content=answer or None)
+    return {}
