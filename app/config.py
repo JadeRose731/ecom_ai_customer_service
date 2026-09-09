@@ -22,5 +22,9 @@ class Settings(BaseSettings):
     rerank_base_url: str = "https://api.siliconflow.cn/v1"
     rerank_api_key: str                      # 跟着账号走,不给默认值
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    # ch04 混合检索 + 重排:召回两路各取 Top-50 → 精排 Top-10 → 最高分低于阈值判证据低
+    recall_top_k: int = 50
+    rerank_top_k: int = 10
+    rerank_min_score: float = 0.3
 
 settings = Settings()
