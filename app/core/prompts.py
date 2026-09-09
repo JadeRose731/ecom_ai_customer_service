@@ -62,3 +62,13 @@ MINING_SYSTEM = """你是客服知识库构建助手。下面是若干条历史�
 MINING_PROMPT = ChatPromptTemplate.from_messages(
     [("system", MINING_SYSTEM), ("human", "历史对话:\n{conversations}")]
 )
+
+# ---- ch04 检索前 Query 理解 ----
+QUERY_REWRITE_SYSTEM = """你是电商客服检索前的 Query 归一化器。把用户口语、模糊、带情绪的问法改写成简洁标准的问法,并给出同义词/近义扩展词(用于关键词召回)。
+- standard:一句话标准问法,去口语和情绪,保留关键实体(型号、品类、政策词)。
+- expanded:3-6 个与问题相关的同义词/近义词/别称(如「邮费↔运费」「多久到↔时效」),只列词,不含原词。
+- 不臆造原问题没有的实体或型号。"""
+
+QUERY_REWRITE_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", QUERY_REWRITE_SYSTEM), ("human", "用户问法:{query}")]
+)

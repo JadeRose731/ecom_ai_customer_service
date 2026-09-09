@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag
+.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-rewrite
 
 dev:
 	./scripts/dev.sh
@@ -54,3 +54,6 @@ milvus-down:
 smoke-rag:
 	PYTHONPATH=. uv run python scripts/smoke_milvus_bm25.py
 	PYTHONPATH=. uv run python scripts/smoke_rerank.py
+
+eval-rewrite:
+	PYTHONPATH=. uv run python scripts/eval_rewrite.py
