@@ -4,12 +4,13 @@ import pathlib
 
 KB_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "kb"
 
-# 文件 → content_type
+# 文件 → content_type(ch04 起增 spec:商品规格手册,含易混型号族)
 SOURCE_TYPES = {
     "product-faq.md": "faq",
     "returns-policy.md": "policy",
     "after-sales-manual.md": "manual",
+    "product-specs.md": "spec",
 }
 
 # 录入页可选的 content_type(mined 是挖知识内部产物,不对外)
-CONTENT_TYPES = ("faq", "policy", "manual")
+CONTENT_TYPES = ("faq", "policy", "manual", "spec")

@@ -1,0 +1,80 @@
+{"id":"A1","bucket":"A_policy","query":"满多少钱包邮,不满怎么收运费","expect_section":["运费怎么算"],"expect_points":["满 99 元包邮","10 元运费"],"should_refuse":false}
+{"id":"A2","bucket":"A_policy","query":"无理由退货要满足什么条件","expect_section":["适用范围"],"expect_points":["7 天内","不影响二次销售"],"should_refuse":false}
+{"id":"A3","bucket":"A_policy","query":"退货之后钱怎么退回来","expect_section":["退款时效"],"expect_points":["原路退回"],"should_refuse":false}
+{"id":"A4","bucket":"A_policy","query":"想换货流程怎么走","expect_section":["换货流程怎么走"],"expect_points":["7 天内可申请换货","补发新品"],"should_refuse":false}
+{"id":"A5","bucket":"A_policy","query":"换货的运费谁出","expect_section":["换货运费"],"expect_points":["买家承担","平台承担"],"should_refuse":false}
+{"id":"A6","bucket":"A_policy","query":"质量问题退换货运费谁承担","expect_section":["退换货运费承担"],"expect_points":["运费由平台承担"],"should_refuse":false}
+{"id":"A7","bucket":"A_policy","query":"电子商品保修多长时间","expect_section":["质量问题与保修","保修说明"],"expect_points":["保修 12 个月"],"should_refuse":false}
+{"id":"A8","bucket":"A_policy","query":"快递送来时商品破损了怎么办","expect_section":["运输破损处理"],"expect_points":["48 小时内","开箱视频"],"should_refuse":false}
+{"id":"A9","bucket":"A_policy","query":"哪些商品不支持退货","expect_section":["不支持退货的商品"],"expect_points":["定制类","猫砂"],"should_refuse":false}
+{"id":"A10","bucket":"A_policy","query":"预售的定金可以退吗","expect_section":["预售与定金"],"expect_points":["不支持无理由退定金"],"should_refuse":false}
+{"id":"A11","bucket":"A_policy","query":"发票怎么开,多久能收到","expect_section":["发票如何开具"],"expect_points":["申请开票","3 个工作日"],"should_refuse":false}
+{"id":"A12","bucket":"A_policy","query":"你们支持什么付款方式","expect_section":["支持哪些支付方式"],"expect_points":["支付宝","微信支付"],"should_refuse":false}
+{"id":"A13","bucket":"A_policy","query":"会员积分怎么攒怎么花","expect_section":["会员等级与积分规则"],"expect_points":["100 积分抵 1 元"],"should_refuse":false}
+{"id":"A14","bucket":"A_policy","query":"优惠券和满减活动怎么使用","expect_section":["优惠券和满减怎么用"],"expect_points":["一张店铺券"],"should_refuse":false}
+{"id":"A15","bucket":"A_policy","query":"偏远地区能送吗,运费怎么收","expect_section":["配送范围与偏远地区"],"expect_points":["运费另计","时效顺延"],"should_refuse":false}
+{"id":"A16","bucket":"A_policy","query":"订单下错了能取消吗","expect_section":["订单可以修改或取消吗"],"expect_points":["未发货前","自助取消"],"should_refuse":false}
+{"id":"A17","bucket":"A_policy","query":"缺货的商品什么时候补货","expect_section":["商品缺货多久补货"],"expect_points":["3 至 7 天内补货","到货通知"],"should_refuse":false}
+{"id":"A18","bucket":"A_policy","query":"买完降价了能退差价吗","expect_section":["价格保护怎么申请"],"expect_points":["7 天内价保","差价"],"should_refuse":false}
+{"id":"A19","bucket":"A_policy","query":"退款一般多久处理完","expect_section":["常见问题处理时限"],"expect_points":["退款","3 个工作日"],"should_refuse":false}
+{"id":"A20","bucket":"A_policy","query":"人工客服几点上班","expect_section":["人工客服入口与时间"],"expect_points":["9:00 至 22:00"],"should_refuse":false}
+{"id":"B1","bucket":"B_model","query":"MH-W40 的滤芯多久换一次","expect_section":["MH-W40"],"expect_points":["每 3 周更换一次滤芯"],"should_refuse":false}
+{"id":"B2","bucket":"B_model","query":"MH-W20 饮水机滤芯更换周期","expect_section":["MH-W20"],"expect_points":["每 2 周更换一次滤芯"],"should_refuse":false}
+{"id":"B3","bucket":"B_model","query":"MH-W60 滤芯用多久换","expect_section":["MH-W60"],"expect_points":["每 4 周更换一次滤芯"],"should_refuse":false}
+{"id":"B4","bucket":"B_model","query":"MH-W40 有杀菌功能吗","expect_section":["MH-W40"],"expect_points":["UV 紫外杀菌"],"should_refuse":false}
+{"id":"B5","bucket":"B_model","query":"MH-W60 是什么材质的","expect_section":["MH-W60"],"expect_points":["304 不锈钢"],"should_refuse":false}
+{"id":"B6","bucket":"B_model","query":"MH-LP100 废砂盒几天倒一次","expect_section":["MH-LP100"],"expect_points":["5 至 7 天"],"should_refuse":false}
+{"id":"B7","bucket":"B_model","query":"MH-LP200 适合多大的猫","expect_section":["MH-LP200"],"expect_points":["2kg 至 12kg","多猫"],"should_refuse":false}
+{"id":"B8","bucket":"B_model","query":"MH-LP50 能连 App 吗","expect_section":["MH-LP50"],"expect_points":["不含 App"],"should_refuse":false}
+{"id":"B9","bucket":"B_model","query":"MH-LP100 猫砂容量多少","expect_section":["MH-LP100"],"expect_points":["9L"],"should_refuse":false}
+{"id":"B10","bucket":"B_model","query":"MH-LP200 的猫砂容量是几升","expect_section":["MH-LP200"],"expect_points":["12L"],"should_refuse":false}
+{"id":"B11","bucket":"B_model","query":"MH-HP12 加热垫温度是多少","expect_section":["MH-HP12"],"expect_points":["38℃"],"should_refuse":false}
+{"id":"B12","bucket":"B_model","query":"MH-HP20 最高档能到多少度","expect_section":["MH-HP20"],"expect_points":["45℃"],"should_refuse":false}
+{"id":"B13","bucket":"B_model","query":"MH-HP12 的尺寸多大","expect_section":["MH-HP12"],"expect_points":["40cm × 30cm"],"should_refuse":false}
+{"id":"B14","bucket":"B_model","query":"MH-FD10 有摄像头吗","expect_section":["MH-FD10"],"expect_points":["不含摄像头"],"should_refuse":false}
+{"id":"B15","bucket":"B_model","query":"MH-FD30 断电了怎么办","expect_section":["MH-FD30"],"expect_points":["应急电池"],"should_refuse":false}
+{"id":"B16","bucket":"B_model","query":"MH-CT30 猫爬架承重多少","expect_section":["MH-CT30"],"expect_points":["10kg"],"should_refuse":false}
+{"id":"B17","bucket":"B_model","query":"MH-CAM1 最大支持多大存储卡","expect_section":["MH-CAM1"],"expect_points":["128G"],"should_refuse":false}
+{"id":"B18","bucket":"B_model","query":"MH-FD30 需要什么网络","expect_section":["MH-FD30"],"expect_points":["2.4G"],"should_refuse":false}
+{"id":"B19","bucket":"B_model","query":"MH-W20 水泵怎么清洗","expect_section":["MH-W20"],"expect_points":["每周清洗一次"],"should_refuse":false}
+{"id":"B20","bucket":"B_model","query":"MH-LP100 适合几公斤的猫","expect_section":["MH-LP100"],"expect_points":["1.5kg 至 8kg"],"should_refuse":false}
+{"id":"C1","bucket":"C_colloquial","query":"那个邮费到底要给多少钱啊","expect_section":["运费怎么算"],"expect_points":["满 99 元包邮"],"should_refuse":false}
+{"id":"C2","bucket":"C_colloquial","query":"我拍下之后东西几天能发出来","expect_section":["发货时效多久"],"expect_points":["48 小时内发货"],"should_refuse":false}
+{"id":"C3","bucket":"C_colloquial","query":"买了不想要了能给退不","expect_section":["适用范围"],"expect_points":["7 天内"],"should_refuse":false}
+{"id":"C4","bucket":"C_colloquial","query":"猫砂盆 Pro 多久倒一次砂合适","expect_section":["MH-LP100"],"expect_points":["5 至 7 天"],"should_refuse":false}
+{"id":"C5","bucket":"C_colloquial","query":"家里猫多,想买那个最大的滚筒猫砂盆,是哪个型号","expect_section":["MH-LP200"],"expect_points":["12L"],"should_refuse":false}
+{"id":"C6","bucket":"C_colloquial","query":"Plus 那款饮水机的芯多久换一次","expect_section":["MH-W40"],"expect_points":["每 3 周"],"should_refuse":false}
+{"id":"C7","bucket":"C_colloquial","query":"喂食器能看到猫吃饭的样子吗","expect_section":["MH-FD30"],"expect_points":["1080P"],"should_refuse":false}
+{"id":"C8","bucket":"C_colloquial","query":"带摄像头的那个喂食器粮桶能装多少粮","expect_section":["MH-FD30"],"expect_points":["6L"],"should_refuse":false}
+{"id":"C9","bucket":"C_colloquial","query":"小奶猫冬天取暖用哪款垫子好","expect_section":["MH-HP12"],"expect_points":["幼猫"],"should_refuse":false}
+{"id":"C10","bucket":"C_colloquial","query":"那个大的垫子开最热档有多热","expect_section":["MH-HP20"],"expect_points":["45℃"],"should_refuse":false}
+{"id":"C11","bucket":"C_colloquial","query":"家里装的看护摄像头能转着看吗","expect_section":["MH-CAM1"],"expect_points":["355°"],"should_refuse":false}
+{"id":"C12","bucket":"C_colloquial","query":"大爬架总高多少,家里层高够不够","expect_section":["MH-CT30"],"expect_points":["1.6m"],"should_refuse":false}
+{"id":"C13","bucket":"C_colloquial","query":"寄回去的快递费得我自己掏吗","expect_section":["退换货运费承担"],"expect_points":["买家承担"],"should_refuse":false}
+{"id":"C14","bucket":"C_colloquial","query":"换个货一般要等几天才有结果","expect_section":["常见问题处理时限"],"expect_points":["换货","5 个工作日"],"should_refuse":false}
+{"id":"C15","bucket":"C_colloquial","query":"发票啥时候能发到我邮箱","expect_section":["发票如何开具"],"expect_points":["3 个工作日"],"should_refuse":false}
+{"id":"C16","bucket":"C_colloquial","query":"攒的那些分有啥用啊","expect_section":["会员等级与积分规则"],"expect_points":["100 积分抵 1 元"],"should_refuse":false}
+{"id":"C17","bucket":"C_colloquial","query":"东西坏了咋整,能修不","expect_section":["维修寄修流程"],"expect_points":["寄回指定维修点"],"should_refuse":false}
+{"id":"C18","bucket":"C_colloquial","query":"预售的那个啥时候能给我发","expect_section":["预售与定金"],"expect_points":["详情页标注"],"should_refuse":false}
+{"id":"C19","bucket":"C_colloquial","query":"水碗不出水了啥毛病啊","expect_section":["常见故障自查"],"expect_points":["水泵"],"should_refuse":false}
+{"id":"C20","bucket":"C_colloquial","query":"机器人答不了想找活人说咋弄","expect_section":["人工客服入口与时间"],"expect_points":["9:00 至 22:00"],"should_refuse":false}
+{"id":"D1","bucket":"D_absent","query":"能货到付款吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D2","bucket":"D_absent","query":"支持数字人民币付款吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D3","bucket":"D_absent","query":"账号不想要了怎么注销","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D4","bucket":"D_absent","query":"旧猫砂盆能以旧换新吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D5","bucket":"D_absent","query":"可以分期免息购买吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D6","bucket":"D_absent","query":"你们有购物礼品卡卖吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D7","bucket":"D_absent","query":"有线下门店可以自提吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D8","bucket":"D_absent","query":"企业批量采购有批发价吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D9","bucket":"D_absent","query":"你们卖活的宠物吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D10","bucket":"D_absent","query":"出差一周,你们提供宠物寄养吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D11","bucket":"D_absent","query":"能上门给猫洗澡护理吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D12","bucket":"D_absent","query":"幼猫疫苗在你们这能打吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D13","bucket":"D_absent","query":"你们卖驱虫药吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D14","bucket":"D_absent","query":"有宠物医疗保险可以买吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D15","bucket":"D_absent","query":"帮我推荐一款国产猫粮牌子","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D16","bucket":"D_absent","query":"你们的猫砂盆和友商比哪个好","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D17","bucket":"D_absent","query":"今天秒杀活动几点开始","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D18","bucket":"D_absent","query":"直播间买有专属优惠吗","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D19","bucket":"D_absent","query":"我家猫三天没吃饭了怎么办","expect_section":[],"expect_points":[],"should_refuse":true}
+{"id":"D20","bucket":"D_absent","query":"喂食器能装冻干当零食喂吗","expect_section":[],"expect_points":[],"should_refuse":true}
