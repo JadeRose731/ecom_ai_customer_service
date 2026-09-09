@@ -74,3 +74,13 @@ async def db_clean(_test_engine):
         for t in _TABLES:
             await conn.execute(text(f"TRUNCATE TABLE {t}"))
         await conn.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+
+
+@pytest_asyncio.fixture()
+async def client():
+    """直接打 FastAPI 应用(ASGI 传输,不起真端口)。"""
+    import httpx
+
+    from app.main import app
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+        yield c

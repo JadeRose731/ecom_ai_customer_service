@@ -19,3 +19,9 @@ def dedupe(items: list, existing_questions: list[str]) -> tuple[list, list]:
             seen.add(key)
             kept.append(item)
     return kept, discarded
+
+
+def fingerprint(question: str, answer: str) -> str:
+    """查重指纹 = normalize(问法) + "|" + normalize(正文)。
+    只按问法会误杀同一节切出的多块(表格按行拆共用节标题)。"""
+    return f"{normalize_question(question)}|{normalize_question(answer)}"

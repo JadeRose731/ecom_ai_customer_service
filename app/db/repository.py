@@ -169,3 +169,42 @@ async def list_conversations_with_messages() -> list[tuple[int, list[Message]]]:
             )).scalars())
             out.append((cid, msgs))
         return out
+
+# ---- ch03 录入页盘点读数 ----
+
+async def knowledge_stats() -> dict:
+    async with db.async_session() as s:
+        total = int((await s.execute(
+            select(func.count()).select_from(KnowledgeChunk))).scalar_one())
+        pending = int((await s.execute(
+            select(func.count()).select_from(KnowledgeChunk)
+            .where(KnowledgeChunk.vectorize_status == "pending"))).scalar_one())
+        done = int((await s.execute(
+            select(func.count()).select_from(KnowledgeChunk)
+            .where(KnowledgeChunk.vectorize_status == "done"))).scalar_one())
+        key_clauses = int((await s.execute(
+            select(func.count()).select_from(KnowledgeChunk)
+            .where(KnowledgeChunk.is_key_clause == 1))).scalar_one())
+        return {"total": total, "pending": pending, "done": done, "key_clauses": key_clauses}
+
+async def list_recent_chunks(limit: int = 20) -> list[KnowledgeChunk]:
+    async with db.async_session() as s:
+        result = await s.execute(
+            select(KnowledgeChunk).order_by(KnowledgeChunk.id.desc()).limit(limit)
+        )
+        return list(result.scalars())
+
+async def list_chunk_pairs() -> list[tuple[str, str]]:
+    """全量 (questions, answer),供录入查重算指纹。"""
+    async with db.async_session() as s:
+        result = await s.execute(select(KnowledgeChunk.questions, KnowledgeChunk.answer))
+        return [(q, a) for q, a in result.all()]
+
+async def staging_stats() -> dict:
+    async with db.async_session() as s:
+        out = {}
+        for st in ("extracted", "kept", "discarded"):
+            out[st] = int((await s.execute(
+                select(func.count()).select_from(QaExtractionStaging)
+                .where(QaExtractionStaging.status == st))).scalar_one())
+        return out
