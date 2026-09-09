@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mewhelp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mewhelp
+    ports:
+      - "3307:3306"   # 本机 3306 被 Windows 版 MySQL 服务占用,映射到 3307
+    volumes:
+      - mewhelp-mysql-data:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d:ro   # 首启按文件名序执行 ch02-ddl.sql → ch02-seed.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  mewhelp-mysql-data:
