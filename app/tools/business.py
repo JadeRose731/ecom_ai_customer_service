@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 
+from app.core import retrieval
 from app.db import repository
 
 class OrderInput(BaseModel):
@@ -58,10 +59,11 @@ class FaqInput(BaseModel):
 @tool(args_schema=FaqInput)
 async def query_faq(keyword: str) -> dict:
     """根据关键词查询常见问题解答(FAQ)。用于用户咨询政策、规则、操作流程等通用问题时。"""
-    rows = await repository.search_faq(keyword)
-    if not rows:
+    # ch03 起内部改走向量语义检索;入参出参契约不变
+    hits = await retrieval.search_knowledge(keyword)
+    if not hits:
         return {"hits": [], "message": f"未找到与「{keyword}」相关的常见问题"}
-    return {"hits": [{"question": r.question, "answer": r.answer} for r in rows]}
+    return {"hits": [{"question": h["question"], "answer": h["answer"]} for h in hits]}
 
 @tool
 async def create_ticket(
