@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors eval-rewrite
+.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite
 
 dev:
 	./scripts/dev.sh
@@ -69,3 +69,7 @@ eval-check:
 # ch04:dev 占位灌库(pytest 每轮清空集合;无 key 阶段重灌真实文本 + 占位向量,BM25 真实)
 dev-vectors:
 	PYTHONPATH=. uv run python scripts/populate_dev_vectors.py
+
+# ch04:裁判一致性回归(台账已处置个案原样重放;不一致退出码 1,需真实上游)
+judge-check:
+	PYTHONPATH=. uv run python scripts/judge_check.py

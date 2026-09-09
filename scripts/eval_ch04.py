@@ -206,10 +206,10 @@ async def _generation(samples: list[dict], HITS: dict) -> dict:
     """段3:四策略答案覆盖度 + hybrid_rerank 忠实度 + D 桶拒答率(全部 glm,可整体失败)。"""
     graded = [s for s in samples if s["bucket"] in GRADED_BUCKETS]
     absent = [s for s in samples if s["bucket"] == "D_absent"]
-    llm = get_chat_model()
-    answer_chain = RAG_ANSWER_PROMPT | llm
-    cover_chain = _COVER_PROMPT | llm.with_structured_output(_Cover)
-    faith_chain = FAITHFULNESS_PROMPT | llm.with_structured_output(_Faith)
+    answer_chain = RAG_ANSWER_PROMPT | get_chat_model()
+    judge = get_chat_model(temperature=0)   # 裁判去抖:0.3 重放会摇摆,0 才能当尺子
+    cover_chain = _COVER_PROMPT | judge.with_structured_output(_Cover)
+    faith_chain = FAITHFULNESS_PROMPT | judge.with_structured_output(_Faith)
     sem = asyncio.Semaphore(GEN_CONCURRENCY)
 
     async def _gen_one(strategy: str, s: dict):

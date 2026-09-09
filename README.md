@@ -104,18 +104,23 @@ uv run uvicorn app.main:app --port 8000   # 起应用,/kb 建库、/admin 看板
 
 `query_faq` 升级为完整 RAG 管线:Query 理解(改写+同义词扩展)→ Milvus 原生 BM25 + dense `hybrid_search`(RRF 融合,Top-50 召回)→ bge-reranker-v2-m3 精排(Top-10)→ 两道证据闸(机械:最高 rerank 分 < 0.3 判检索低置信;语义:结构化自评判证据不够)→ 首尾组装编号证据 → 拒答/落池。证据走 SSE `citations` 事件下发,聊天页 `[n]` 渲染成可点角标(浮层看 section_path + 原文),每段回答带 👍/👎 一次性反馈;两道闸都拦下的题进 `low_confidence_questions` 问题池(`retrieval_low_conf` / `self_check`)。
 
-评估体系四策略(`vector` / `bm25` / `hybrid` / `hybrid_rerank`)对照,评估的就是线上的——全部走同一个 `search_knowledge(strategy=...)`:80 题四桶评估集(A 政策 / B 型号易混族 / C 口语 / D 库外应有拒答),三段报告(检索 Recall@10/MRR + 证据覆盖度确定性机械匹配;生成段答案覆盖度/忠实度/拒答率带超时与单点隔离,上游挂了 generation=null 照样落盘)。
+评估体系四策略(`vector` / `bm25` / `hybrid` / `hybrid_rerank`)对照,评估的就是线上的——全部走同一个 `search_knowledge(strategy=...)`:**300 题五桶评估集**(A 政策 / B 型号易混族 / C 口语 / D 库外应有拒答 / **E 跨文档**——一问要两三块不同小节的知识,`expect_sections_all` 分组给分),三段报告(检索 Recall@5/MRR + 证据覆盖度确定性机械匹配;生成段答案覆盖度/忠实度/拒答率带超时与单点隔离,上游挂了 generation=null 照样落盘)。评估集由 `make eval-check` 守门(五桶各 60 / 小节与要点逐字校准 / D 桶规则)。判出的编造个案进 `faith_cases` 台账(一题一行跨轮累计 + 人工处置 + 证据快照,`/rag-eval` 页面可处置);`hallucination_round` 保证判出率只算本轮,台账旧账不摊到新轮;`make judge-check` 用台账快照原样重放,人工处置当标准答案回归裁判一致率(裁判 `temperature=0` 去抖,口径七类豁免 + 六个 few-shot 判例)。
 
 ```bash
 make milvus-up             # Milvus 三容器(healthz 就绪门)
 make kb-build && make kb-vectorize   # 44 块语料(faq/policy/manual/spec 四源,含易混型号族)
+make eval-check            # 评估集守门(改题后必跑,不需 MySQL/Milvus)
 make eval-rag              # 四策略三段报告 → data/ch04/reports/rag_eval.{txt,json}
-                           #   无 key 阶段可 EVAL_STRATEGIES=bm25 只跑确定性 BM25 行
-uv run uvicorn app.main:app --port 8000   # /rag-eval 看报告 + 重跑;/ 聊天页引用角标
+                           #   无 key 阶段可 EVAL_STRATEGIES=bm25 只跑确定性 BM25 行;
+                           #   EVAL_SKIP_GENERATION=1 跳过生成段(dev 省 ~45 分钟空烧)
+make judge-check           # 裁判一致性回归(需真实上游 + 台账已有已处置个案)
+uv run uvicorn app.main:app --port 8000   # /rag-eval 看报告/台账 + 重跑;/ 聊天页引用角标
 ```
 
-- **单测**(121 个):`uv run pytest`(Milvus Standalone 真连;LLM/嵌入/重排 mock)。
-- **验收入口**:`/rag-eval` 报告页(KPI/分组柱状图/读图句/汇总表 best 行底色)与终端 `make eval-rag` 同一份产物;`/admin` 第五张卡看最佳 MRR。
+> 无 key 阶段注意:跑全量单测会把 Milvus 集合清掉(测试夹具每例 drop/重建),之后跑真集合评估前先 `make dev-vectors` 重灌(真实文本 + 确定性占位向量,BM25 真实;不动 MySQL status,真 key 的 `kb-vectorize` 原位覆盖)。
+
+- **单测**(139 个):`uv run pytest`(Milvus Standalone 真连;LLM/嵌入/重排 mock)。
+- **验收入口**:`/rag-eval` 报告页(KPI/五桶分组柱状图/读图句/汇总表 best 行底色/编造个案台账)与终端 `make eval-rag` 同一份产物;`/admin` 第五张卡看最佳 MRR。
 
 ## 技术栈
 
