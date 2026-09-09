@@ -146,3 +146,8 @@ INTENT_CLASSIFY_SYSTEM = """你是电商客服的意图分类器。把用户这�
 INTENT_CLASSIFY_PROMPT = ChatPromptTemplate.from_messages(
     [("system", INTENT_CLASSIFY_SYSTEM), ("human", "用户这句话:{query}")]
 )
+
+# ---- ch05 确定性出口话术(不进模型,代码里直接拼) ----
+CHITCHAT_REPLY_TEXT = "你好呀~我是喵喵优选的智能客服小喵。商品、订单、物流、售后都可以问我哦,有什么能帮您的?"
+COMPLAINT_REPLY_TEXT = "非常抱歉给您带来了不好的体验,我理解您的心情。您可以选择转接人工客服,或让我为您登记一张工单跟进处理。"
+FALLBACK_REPLY_TEXT = "抱歉,这个问题我暂时没有查到确切信息,不敢乱答。建议您联系人工客服进一步确认,以免给您错误的指引。"
