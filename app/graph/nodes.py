@@ -1,14 +1,17 @@
 import logging
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.config import settings
 from app.core import intent as intent_mod
 from app.core import query_understanding, retrieval, selfcheck
+from app.core.llm import get_chat_model
 from app.core.prompts import (
-    CHITCHAT_REPLY_TEXT, COMPLAINT_REPLY_TEXT, FALLBACK_REPLY_TEXT,
+    AGENT_SYSTEM, CHITCHAT_REPLY_TEXT, COMPLAINT_REPLY_TEXT, FALLBACK_REPLY_TEXT,
 )
 from app.db import repository
+from app.tools.infra import execute_tool_call
+from app.tools.registry import get_all_tools
 
 logger = logging.getLogger(__name__)
 
@@ -100,3 +103,50 @@ async def confidence_check(state) -> dict:
     强/弱的实际分流在其后的条件边 confidence_gate(读 evidence_strong)。"""
     decision = "strong" if state.get("evidence_strong") else "weak"
     return {"trace": {"confidence": decision}}
+
+
+_KNOWLEDGE_EVIDENCE_HINT = (
+    "\n\n## 已检索到的知识证据(请据此作答,每个关键结论后标注来源编号如[1];"
+    "证据已给,不要再调用 query_faq;仍可按需调用订单/物流等工具)\n"
+)
+
+
+def _agent_messages(state) -> list:
+    """system(知识路拼证据) + 跨轮历史。"""
+    sys = AGENT_SYSTEM
+    if state.get("route") == "knowledge" and state.get("evidence"):
+        sys = AGENT_SYSTEM + _KNOWLEDGE_EVIDENCE_HINT + state["evidence"]
+    return [SystemMessage(sys), *state.get("messages", [])]
+
+
+async def agent_llm(state, config=None) -> dict:
+    """ReAct 推理步:调模型(带工具),累加 steps 与 token 消耗。"""
+    model = get_chat_model(streaming=True).bind_tools(get_all_tools())
+    ai: AIMessage = await model.ainvoke(_agent_messages(state), config)
+    used = (ai.usage_metadata or {}).get("total_tokens", 0) if ai.usage_metadata else 0
+    return {"messages": [ai],
+            "steps": state.get("steps", 0) + 1,
+            "tokens_used": state.get("tokens_used", 0) + used}
+
+
+async def agent_tools(state) -> dict:
+    """ReAct 行动步:执行工具并回灌结果。create_ticket 拦截为『提议』——不写库,
+    转成前端可选项,并回一条合成 ToolMessage 让模型收敛(真正写库在按钮端点)。"""
+    last = state["messages"][-1]
+    tool_msgs = []
+    actions = list(state.get("suggested_actions", []))
+    for tc in last.tool_calls:
+        if tc["name"] == "create_ticket":
+            draft = {"description": tc["args"].get("description", ""),
+                     "ticket_type": tc["args"].get("ticket_type", "咨询")}
+            actions.append({"type": "create_ticket", "draft": draft})
+            tool_msgs.append(ToolMessage(
+                content="已把『建工单』选项交给用户自行确认。请用一句话简要说明并停止,不要再调用任何工具。",
+                tool_call_id=tc["id"], name="create_ticket"))
+        else:
+            run = await execute_tool_call(tc, state.get("conversation_id", 0))
+            tool_msgs.append(run.tool_message)
+    out = {"messages": tool_msgs}
+    if actions:
+        out["suggested_actions"] = actions
+    return out
