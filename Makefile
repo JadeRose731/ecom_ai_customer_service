@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-rewrite
+.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors eval-rewrite
 
 dev:
 	./scripts/dev.sh
@@ -61,3 +61,11 @@ eval-rewrite:
 # ch04:四策略评估三段跑齐(检索/证据覆盖度确定性必出;生成段无 key 时自动跳过)
 eval-rag:
 	PYTHONPATH=. uv run python scripts/eval_ch04.py
+
+# ch04:评估集守门(五桶各 60 / 小节与要点逐字校准 / D 桶规则),改题后必跑
+eval-check:
+	PYTHONPATH=. uv run python scripts/validate_eval_ch04.py
+
+# ch04:dev 占位灌库(pytest 每轮清空集合;无 key 阶段重灌真实文本 + 占位向量,BM25 真实)
+dev-vectors:
+	PYTHONPATH=. uv run python scripts/populate_dev_vectors.py

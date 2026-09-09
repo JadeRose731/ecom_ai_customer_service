@@ -115,6 +115,7 @@ const BUCKETS = [
   { key: 'A_policy', title: 'A 政策' },
   { key: 'B_model', title: 'B 型号' },
   { key: 'C_colloquial', title: 'C 口语' },
+  { key: 'E_multi', title: 'E 跨文档' },
   { key: 'all', title: '总体' },
 ];
 const PCT = (v) => (v == null ? '—' : (v * 100).toFixed(1) + '%');
@@ -136,7 +137,7 @@ function paintRetrieval() {
   const legend = STRATS.map((s) => '<span class="st-' + s.key + '"><i></i>' + s.title + '</span>').join('');
   document.getElementById('retrieval-legend').innerHTML = legend;
   const metric = state.metric;
-  document.querySelector('#retrieval-switch .kcap').textContent = (state.data.meta && state.data.meta.k) || 10;
+  document.querySelector('#retrieval-switch .kcap').textContent = (state.data.meta && state.data.meta.recall_k) || 5;
 
   if (metric === 'cov') {
     // 证据覆盖度只有总体一档(确定性机械匹配)
@@ -248,7 +249,7 @@ function paintMeta() {
   const gate = (num, label) => gates.push('<div class="gate"><div class="num">' + num + '</div><div class="label">' + label + '</div></div>');
   gate(m.n_samples ?? '—', '评估集题数');
   gate(m.kb_chunks ?? '—', '知识库块数');
-  gate(m.k ?? '—', 'Recall@K');
+  gate((m.recall_k ?? '—') + ' / K ' + (m.k ?? '—'), 'Recall 窗口 / 检索深度');
   const mo = m.models || {};
   gate((mo.embed || '—').split('/').pop(), '嵌入模型');
   gate((mo.rerank || '—').split('/').pop(), '重排模型');

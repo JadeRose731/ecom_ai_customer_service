@@ -2,7 +2,8 @@
 """ch04 四策略分桶评估:评估的就是线上的——四个策略全部走 app.core.retrieval.search_knowledge。
 
 三段一次跑齐:
-  段1 检索(确定性):四策略 × A/B/C 桶 Recall@K / MRR(按 expect_section 命中 section_path)。
+  段1 检索(确定性):四策略 × A/B/C/E 桶 Recall@5 / MRR(按 expect_section 命中 section_path;
+      检索深度 K=10,Recall 只看前 5 名,MRR 用全窗口。E 跨文档桶按 expect_sections_all 分组给分)。
   段2 证据覆盖度(确定性):四策略召回 Top-K 证据机械匹配盖住 expect_points 的比例。
   段3 生成(glm):四策略答案覆盖度(证据→生成→glm 判盖住几个要点)+ hybrid_rerank 忠实度 + D 桶拒答率。
 
@@ -29,8 +30,9 @@ from app.tools.business import query_faq
 # 默认四策略全跑;无 key 阶段可 EVAL_STRATEGIES=bm25 只跑确定性的纯 BM25 行
 STRATEGIES = [s.strip() for s in os.environ.get(
     "EVAL_STRATEGIES", "vector,bm25,hybrid,hybrid_rerank").split(",") if s.strip()]
-GRADED_BUCKETS = ["A_policy", "B_model", "C_colloquial"]
-K = 10
+GRADED_BUCKETS = ["A_policy", "B_model", "C_colloquial", "E_multi"]
+K = 10                # 检索深度
+RECALL_K = 5          # Recall 窗口:只看前 5 名(题扩到 300 后把"进前 10"收紧成"进前 5")
 RETR_CONCURRENCY, GEN_CONCURRENCY, CALL_TIMEOUT = 8, 3, 45.0
 
 # 要点核对裁判:只回一个数(部分覆盖算盖住,数字/同义表述都算)——扁平字段,glm 嵌套 502 的教训
@@ -94,6 +96,19 @@ def _hit_section(hit: dict, sections: list[str]) -> bool:
     return any(_norm(s) in sp for s in sections)
 
 
+def _bucket_sections(s: dict) -> list[list[str]]:
+    """A–D 返回 [expect_section](单组);E 返回 expect_sections_all(多组,组内任一别名命中即算)。"""
+    if "expect_sections_all" in s:
+        return s["expect_sections_all"]
+    return [s["expect_section"]]
+
+
+def _group_rank(hits: list[dict], aliases: list[str], limit: int | None = None) -> int:
+    """该组证据在 hits 里首次命中的名次(1 起);未命中 0。limit 截断 Recall 窗口。"""
+    pool = hits[:limit] if limit else hits
+    return next((i + 1 for i, h in enumerate(pool) if _hit_section(h, aliases)), 0)
+
+
 def _coverage_mech(points: list[str], hits: list[dict]) -> float | None:
     """证据覆盖度:expect_points 去空白后是否为召回证据答案文本的子串。"""
     if not points:
@@ -127,7 +142,9 @@ async def _deterministic(samples: list[dict]):
             continue
         HITS[(r[0], r[1])] = r[2]
 
-    # 段1:Recall@K / MRR(逐桶 + 总体;各桶题数相同,总体取桶均值)
+    # 段1:Recall@RECALL_K / MRR(逐桶 + 总体;各桶题数相同,总体取桶均值)
+    # A–D 单组证据:Recall 看前 RECALL_K 名,MRR 用全 K 窗口;
+    # E 跨文档:Recall=命中组数/总组数(凑齐才 1.00),MRR=各组名次倒数取平均、漏的记 0。
     retrieval_d: dict[str, dict] = {}
     for st in STRATEGIES:
         per_bucket = {}
@@ -137,16 +154,23 @@ async def _deterministic(samples: list[dict]):
                 if s["bucket"] != b:
                     continue
                 hits = HITS.get((st, s["id"]), [])
-                rank = next((i + 1 for i, h in enumerate(hits) if _hit_section(h, s["expect_section"])), 0)
-                rs.append(1.0 if rank else 0.0)
-                rr.append(1.0 / rank if rank else 0.0)
+                groups = _bucket_sections(s)
+                if s["bucket"] == "E_multi":
+                    ranks = [_group_rank(hits, g) for g in groups]
+                    rs.append(sum(1 for r in ranks if r) / len(ranks))
+                    rr.append(sum(1.0 / r if r else 0.0 for r in ranks) / len(ranks))
+                else:
+                    recall_rank = _group_rank(hits, groups[0], RECALL_K)
+                    mrr_rank = _group_rank(hits, groups[0])
+                    rs.append(1.0 if recall_rank else 0.0)
+                    rr.append(1.0 / mrr_rank if mrr_rank else 0.0)
             per_bucket[b] = {"recall": round(sum(rs) / len(rs), 4), "mrr": round(sum(rr) / len(rr), 4)}
         per_bucket["all"] = {
             "recall": round(sum(per_bucket[b]["recall"] for b in GRADED_BUCKETS) / len(GRADED_BUCKETS), 4),
             "mrr": round(sum(per_bucket[b]["mrr"] for b in GRADED_BUCKETS) / len(GRADED_BUCKETS), 4)}
         retrieval_d[st] = per_bucket
         _log(f"[检索 {st}] " + "  ".join(
-            f"{b}: R@{K}={per_bucket[b]['recall']:.3f} MRR={per_bucket[b]['mrr']:.3f}"
+            f"{b}: R@{RECALL_K}={per_bucket[b]['recall']:.3f} MRR={per_bucket[b]['mrr']:.3f}"
             for b in GRADED_BUCKETS + ["all"]))
 
     # 段2:证据覆盖度(确定性,四策略对比)
@@ -264,12 +288,15 @@ async def main() -> None:
     samples = _load()
     retrieval_d, coverage_d, HITS = await _deterministic(samples)   # 确定性,始终产出
     generation_d = None
-    try:
-        generation_d = await _generation(samples, HITS)             # glm,失败不拖垮整轮
-    except Exception as e:  # noqa: BLE001
-        _log(f"[生成段未完成] {type(e).__name__}: {e}")
+    if os.environ.get("EVAL_SKIP_GENERATION"):
+        _log("[生成段] EVAL_SKIP_GENERATION=1,跳过(检索段照常;dev 无 key 时省一轮必超时)")
+    else:
+        try:
+            generation_d = await _generation(samples, HITS)         # glm,失败不拖垮整轮
+        except Exception as e:  # noqa: BLE001
+            _log(f"[生成段未完成] {type(e).__name__}: {e}")
     meta = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "elapsed_s": round(time.time() - t0, 1),
-            "k": K, "strategies": STRATEGIES, "n_samples": len(samples),
+            "k": K, "recall_k": RECALL_K, "strategies": STRATEGIES, "n_samples": len(samples),
             "kb_chunks": (await repository.knowledge_stats())["total"],   # 报告头:本次跑时的库规模
             "models": {"chat": settings.chat_model, "embed": settings.embed_model,
                        "rerank": settings.rerank_model},
