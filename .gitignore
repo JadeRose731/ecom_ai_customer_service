@@ -5,3 +5,5 @@ __pycache__/
 .pytest_cache/
 data/*.db*
 data/volumes/
+log/
+data/ch04/reports/
