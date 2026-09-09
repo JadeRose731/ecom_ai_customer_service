@@ -17,7 +17,40 @@ services:
       retries: 20
 
   # ch03:计划定的 Milvus Lite(嵌入式本地文件)无 Windows 包,经用户确认改跑
-  # Milvus Standalone(单容器 embedded etcd + 本地存储);pymilvus API 与 Lite 一致。
+  # Milvus Standalone;pymilvus API 与 Lite 一致。
+  # 2.6 起官方移除 embedded etcd(单容器形态会 panic),按官方三容器 compose 落地。
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.25
+    container_name: mewhelp-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ./data/volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus-minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: mewhelp-minio
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - ./data/volumes/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
   milvus:
     image: milvusdb/milvus:v2.6.0
     container_name: mewhelp-milvus
@@ -25,21 +58,25 @@ services:
     security_opt:
       - seccomp:unconfined
     environment:
-      ETCD_USE_EMBED: "true"
-      ETCD_DATA_DIR: /var/lib/milvus/etcd
-      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
-      COMMON_STORAGETYPE: "local"
+      MINIO_REGION: us-east-1
+      ETCD_ENDPOINTS: milvus-etcd:2379   # 指向本文件的服务名,官方文件的 etcd:/minio: 在此不存在
+      MINIO_ADDRESS: milvus-minio:9000
     volumes:
       - ./data/volumes/milvus:/var/lib/milvus
     ports:
       - "19530:19530"
       - "9091:9091"
+    depends_on:
+      milvus-etcd:
+        condition: service_healthy
+      milvus-minio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 10s
       retries: 30
-      start_period: 30s
+      start_period: 60s
 
 volumes:
   mewhelp-mysql-data:
