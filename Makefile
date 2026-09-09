@@ -57,3 +57,7 @@ smoke-rag:
 
 eval-rewrite:
 	PYTHONPATH=. uv run python scripts/eval_rewrite.py
+
+# ch04:四策略评估三段跑齐(检索/证据覆盖度确定性必出;生成段无 key 时自动跳过)
+eval-rag:
+	PYTHONPATH=. uv run python scripts/eval_ch04.py
