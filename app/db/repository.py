@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 import app.db.base as db          # 用模块属性引用,便于测试 monkeypatch async_session
-from app.db.models import Conversation, Faq, KnowledgeChunk, Message, QaExtractionStaging, Ticket
+from app.db.models import Conversation, Faq, KnowledgeChunk, LowConfidenceQuestion, Message, QaExtractionStaging, Ticket
 
 _TICKET_SEQ = 0
 
@@ -208,3 +208,18 @@ async def staging_stats() -> dict:
                 select(func.count()).select_from(QaExtractionStaging)
                 .where(QaExtractionStaging.status == st))).scalar_one())
         return out
+
+
+async def insert_low_confidence(
+    conversation_id: int | None, raw_question: str, source: str, reason: str | None
+) -> int:
+    """低置信问题落池(ch04:retrieval_low_conf / self_check 两入口;user_feedback 留数据飞轮章)。"""
+    async with db.async_session() as s:
+        row = LowConfidenceQuestion(
+            conversation_id=conversation_id, raw_question=raw_question,
+            source=source, reason=reason,
+        )
+        s.add(row)
+        await s.commit()
+        await s.refresh(row)
+        return row.id

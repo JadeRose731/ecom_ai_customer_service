@@ -99,3 +99,18 @@ class QaExtractionStaging(Base):
         Enum("extracted", "kept", "discarded"), server_default="extracted"
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+class LowConfidenceQuestion(Base):
+    __tablename__ = "low_confidence_questions"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("conversations.id"), nullable=True
+    )
+    raw_question: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(
+        Enum("retrieval_low_conf", "self_check", "user_feedback")
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

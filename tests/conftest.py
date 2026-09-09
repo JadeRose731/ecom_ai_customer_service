@@ -11,9 +11,10 @@ from app.config import settings
 _DDL_FILES = [
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch02-ddl.sql",
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch03-ddl.sql",
+    pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch04-ddl.sql",
 ]
 # 删除顺序:先子表后父表;knowledge_chunks 自引用 FK 靠 FOREIGN_KEY_CHECKS=0 兜
-_TABLES = ["messages", "tickets", "conversations", "faq",
+_TABLES = ["low_confidence_questions", "messages", "tickets", "conversations", "faq",
            "qa_extraction_staging", "knowledge_chunks"]
 
 
