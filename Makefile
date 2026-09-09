@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-build kb-vectorize kb-mine eval-retrieval
+.PHONY: dev test eval seed eval-agent kb-build kb-vectorize kb-mine eval-retrieval seed-conv eval-mining
 
 dev:
 	./scripts/dev.sh
@@ -26,3 +26,9 @@ kb-mine:
 
 eval-retrieval:
 	PYTHONPATH=. uv run python scripts/eval_retrieval.py
+
+seed-conv:
+	docker exec -i mewhelp-mysql mysql --default-character-set=utf8mb4 -uroot -proot mewhelp < sql/ch03-seed.sql
+
+eval-mining:
+	PYTHONPATH=. uv run python scripts/eval_mining.py
