@@ -1,4 +1,6 @@
-# 计划夹具用临时 Milvus Lite 文件;Windows 无 Lite,改用 Docker Standalone(非单例客户端,见 conftest)
+# ch03 起留的真实 Milvus 检索测试。ch04 起 search_knowledge 走 strategy 分支:
+# 阈值过滤移到 query_faq 的机械闸(rerank_min_score,见 test_query_faq_rag),
+# 这里只验 vector 路打真库能取回正确 chunk。
 import pytest
 
 from app.config import settings
@@ -26,20 +28,13 @@ def milvus():
         c.drop_collection(milvus_client.COLLECTION)
 
 
-async def test_search_returns_top_hits_above_threshold(monkeypatch, milvus):
+async def test_vector_strategy_returns_top_hit(monkeypatch, milvus):
     query_vec = [1.0, 0.0, 1.0] + [0.0] * (milvus_client.DIM - 3)
-    monkeypatch.setattr("app.core.retrieval.embeddings.embed_query",
-                        lambda q: _coro(query_vec))
-    hits = await retrieval.search_knowledge("邮费是多少", top_k=1, min_score=0.5, client=milvus)
+
+    async def fake_embed(q):
+        return query_vec
+
+    monkeypatch.setattr("app.core.retrieval.embeddings.embed_query", fake_embed)
+    hits = await retrieval.search_knowledge("邮费是多少", strategy="vector", top_k=1, client=milvus)
     assert hits and hits[0]["question"] == "运费怎么算"
-
-
-async def test_below_threshold_filtered(monkeypatch, milvus):
-    monkeypatch.setattr("app.core.retrieval.embeddings.embed_query",
-                        lambda q: _coro([1.0, 0.0, 1.0] + [0.0] * (milvus_client.DIM - 3)))
-    hits = await retrieval.search_knowledge("邮费", top_k=2, min_score=0.999999, client=milvus)
-    assert hits == [] or all(h["score"] >= 0.999999 for h in hits)
-
-
-async def _coro(v):
-    return v
+    assert hits[0]["score"] > 0.99  # Standalone COSINE distance 即相似度,同向应接近 1
