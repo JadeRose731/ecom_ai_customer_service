@@ -18,5 +18,9 @@ class Settings(BaseSettings):
     milvus_uri: str = "http://localhost:19530"
     retrieval_top_k: int = 3
     retrieval_min_score: float = 0.4
+    # ch04 重排:bge-reranker-v2-m3 走 Jina / Cohere 那套 /rerank 形状,不是 OpenAI 协议
+    rerank_base_url: str = "https://api.siliconflow.cn/v1"
+    rerank_api_key: str                      # 跟着账号走,不给默认值
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
 
 settings = Settings()

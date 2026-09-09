@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining
+.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag
 
 dev:
 	./scripts/dev.sh
@@ -38,3 +38,19 @@ seed-conv:
 
 eval-mining:
 	PYTHONPATH=. uv run python scripts/eval_mining.py
+
+# ch04:Milvus 三件套起停。服务名是本仓库 compose 里的(milvus/milvus-etcd/milvus-minio),
+# 不是官方文件的 etcd/minio/milvus-standalone——ch03 迁 Standalone 时已按本仓库惯例命名。
+milvus-up:
+	docker compose up -d milvus milvus-etcd milvus-minio
+	@echo "等待 Milvus 就绪(healthz)..."; \
+	for i in $$(seq 1 60); do \
+	  curl -sf http://localhost:9091/healthz >/dev/null 2>&1 && echo "Milvus OK" && exit 0; \
+	  sleep 3; done; echo "Milvus 未就绪" && exit 1
+
+milvus-down:
+	docker compose stop milvus milvus-etcd milvus-minio
+
+smoke-rag:
+	PYTHONPATH=. uv run python scripts/smoke_milvus_bm25.py
+	PYTHONPATH=. uv run python scripts/smoke_rerank.py
