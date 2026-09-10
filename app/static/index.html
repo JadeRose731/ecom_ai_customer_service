@@ -68,6 +68,28 @@
   .fb-btn.active { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
   .fb-btn.dim { opacity: .4; pointer-events: none; }
   .fb-done { color: var(--muted); }
+  /* ch05 建议动作按钮 + 工单表单弹窗 */
+  .action-bar { display: flex; gap: 8px; margin-top: 2px; }
+  .action-btn { border: 1px solid var(--brand); background: #fff; color: var(--brand); border-radius: 8px;
+                padding: 5px 14px; cursor: pointer; font-size: 13px; }
+  .action-btn:hover:not(:disabled) { background: var(--brand-soft); }
+  .action-btn:disabled { border-color: var(--line); color: var(--muted); background: #f3f4f6; cursor: not-allowed; }
+  #ticket-mask { position: fixed; inset: 0; background: rgba(31,36,48,.4); display: none; z-index: 100;
+                 align-items: center; justify-content: center; }
+  #ticket-mask.show { display: flex; }
+  #ticket-modal { width: min(420px, 92vw); background: #fff; border-radius: 14px; padding: 18px;
+                  box-shadow: 0 12px 40px rgba(31,36,48,.2); }
+  #ticket-modal h3 { font-size: 15px; margin-bottom: 4px; }
+  #ticket-modal label { display: block; font-size: 13px; margin: 10px 0 4px; }
+  #ticket-modal select, #ticket-modal textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px;
+                                                 padding: 8px 10px; font: inherit; outline: none; background: #fff; }
+  #ticket-modal select:focus, #ticket-modal textarea:focus { border-color: var(--brand); }
+  #ticket-modal textarea { height: 84px; resize: vertical; }
+  #ticket-modal .err { color: #d03050; font-size: 12px; min-height: 16px; margin-top: 6px; }
+  #ticket-modal .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  #ticket-modal .btns button { border-radius: 8px; padding: 7px 16px; cursor: pointer; font-size: 13px;
+                               border: 1px solid var(--line); background: #fff; }
+  #ticket-modal .btns .primary { border: none; background: var(--brand); color: #fff; }
   footer { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; }
   #input { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
            font: inherit; outline: none; height: 44px; }
@@ -89,6 +111,25 @@
   </header>
   <div id="chat"></div>
   <div id="cite-panel"></div>
+  <div id="ticket-mask">
+    <div id="ticket-modal" role="dialog" aria-modal="true">
+      <h3>创建工单</h3>
+      <label for="ticket-type">反馈类别(必选)</label>
+      <select id="ticket-type">
+        <option value="">请选择</option>
+        <option value="售后">售后</option>
+        <option value="投诉">投诉</option>
+        <option value="咨询">咨询</option>
+      </select>
+      <label for="ticket-desc">反馈描述(必填)</label>
+      <textarea id="ticket-desc" placeholder="请描述您遇到的问题…"></textarea>
+      <div class="err" id="ticket-err"></div>
+      <div class="btns">
+        <button id="ticket-cancel" type="button">取消</button>
+        <button id="ticket-submit" type="button" class="primary">提交工单</button>
+      </div>
+    </div>
+  </div>
   <footer>
     <textarea id="input" placeholder="输入消息,Enter 发送,Shift+Enter 换行"></textarea>
     <button id="send">发送</button>
@@ -283,10 +324,98 @@ function renderMarkdown(el, raw) {
   scrollBottom();
 }
 
+/* ---------- ch05 建议动作(转人工 / 建工单) ---------- */
+function addBotText(text) {
+  const row = document.createElement('div');
+  row.className = 'row bot';
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.textContent = text;
+  row.appendChild(b);
+  chatEl.appendChild(row);
+  scrollBottom();
+}
+
+function renderActions(container, items) {
+  const bar = document.createElement('div');
+  bar.className = 'action-bar';
+  for (const a of items) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'action-btn';
+    if (a.type === 'transfer_human') {
+      btn.textContent = '转人工';
+      btn.addEventListener('click', () => {
+        btn.disabled = true;
+        // 纯前端模拟:显示已转接 + 客服小猫问候(本章不接真人系统)
+        addBotText('已转接人工客服');
+        addBotText('您好,我是客服小猫,请问有什么可以帮您的');
+      });
+    } else if (a.type === 'create_ticket') {
+      btn.textContent = '建工单';
+      btn.addEventListener('click', () => openTicketModal(btn));
+    } else {
+      continue;
+    }
+    bar.appendChild(btn);
+  }
+  if (bar.children.length) container.appendChild(bar);
+  scrollBottom();
+}
+
+let ticketBtn = null;
+function openTicketModal(btn) {
+  ticketBtn = btn || null;
+  document.getElementById('ticket-type').value = '';   // 类别不预选,必选
+  document.getElementById('ticket-desc').value = '';   // 描述不预填草稿,必填
+  document.getElementById('ticket-err').textContent = '';
+  document.getElementById('ticket-mask').classList.add('show');
+}
+function closeTicketModal() {
+  document.getElementById('ticket-mask').classList.remove('show');
+}
+
+async function submitTicket() {
+  const t = document.getElementById('ticket-type').value;
+  const d = document.getElementById('ticket-desc').value.trim();
+  const err = document.getElementById('ticket-err');
+  if (!t) { err.textContent = '请选择反馈类别'; return; }
+  if (!d) { err.textContent = '请填写反馈描述'; return; }
+  err.textContent = '';
+  try {
+    const resp = await fetch('/api/actions/create-ticket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: Number(conversationId),
+        description: d,
+        ticket_type: t,
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok) {
+      addBotText('工单已创建:' + data.ticket_no);
+      if (ticketBtn) ticketBtn.disabled = true;
+      closeTicketModal();
+    } else {
+      err.textContent = data.detail || '工单创建失败,请稍后重试';
+    }
+  } catch (e) {
+    err.textContent = '工单创建失败,请稍后重试';
+  }
+  scrollBottom();
+}
+document.getElementById('ticket-cancel').addEventListener('click', closeTicketModal);
+document.getElementById('ticket-mask').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeTicketModal();
+});
+document.getElementById('ticket-submit').addEventListener('click', submitTicket);
+
 /* ---------- SSE 流式 ---------- */
 async function streamChat(message) {
   const shell = appendBotShell();
   let errorShown = false;
+  let pendingActions = [];
   try {
     const resp = await fetch('/api/chat', {
       method: 'POST',
@@ -326,6 +455,9 @@ async function streamChat(message) {
         // ch04:引用数据先挂到气泡上,citations 事件先于 delta 下发
         shell.citations = payload.items || [];
         shell.bubble.citations = shell.citations;
+      } else if (payload.event === 'actions') {
+        // ch05:转人工/建工单等建议动作,流结束后渲染
+        pendingActions = payload.items || [];
       } else if (payload.event === 'done') {
         conversationId = String(payload.conversation_id);
         localStorage.setItem(CID_KEY, conversationId);
@@ -347,6 +479,7 @@ async function streamChat(message) {
     }
     if (!shell.firstDelta && !errorShown) shell.bubble.textContent = '…';
     if (shell.firstDelta && !errorShown) addFeedbackBar(shell);
+    if (pendingActions.length && !errorShown) renderActions(shell.wrap, pendingActions);
   } catch (err) {
     shell.bubble.classList.remove('md');
     shell.bubble.innerHTML = '<span class="error">⚠️ 网络异常,请稍后重试</span>';
