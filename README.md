@@ -10,7 +10,7 @@
 | [ch02](ch02/) | Function Calling 工具链 | `@tool` 内置工具(查物流/查订单/查 FAQ)、单轮工具调用、会话消息落库、聊天页工具轨迹徽章 |
 | [ch03](ch03/) | RAG 知识库 | Markdown 结构感知切分、对话挖知识离线批处理、BGE-M3 嵌入、Milvus Standalone dense 单路检索、`/kb` 浏览器建库 |
 | [ch04](ch04/) | 混合检索 + 重排 + 评估 | Milvus Standalone 原生 BM25 + dense 混合检索(RRF)、bge-reranker-v2-m3 重排、Query 理解、带引用/拒答/自评落池、四策略评估体系、👍/👎 满意度反馈 |
-| [ch05](ch05/) | Workflow + Agent 混合架构 | LangGraph 确定性骨架(指代消解 → 意图识别 → 分流 → 置信度兜底)+ ReAct 主力 Agent |
+| [ch05](ch05/) | Workflow + Agent 混合架构 | LangGraph 确定性骨架(指代消解 → 意图识别 → 分流 → 置信度兜底)+ ReAct 主力 Agent、七类意图 7→4 分流、SSE actions 帧(转人工/建工单) |
 | [ch06](ch06/) | 意图识别与对话管理 | 指代消解 + Query 改写、多查询扩写、八类意图 + 置信度、「其他」兜底、退款售后确定性子流程、订单选择器 |
 | [ch07](ch07/) | 会话上下文管理 | 滑动窗口 + 异步滚动摘要双层结构、固定拼装顺序、token 预算兜底、多会话侧栏 |
 | [ch08](ch08/) | 即插即用工具系统 | 工具注册中心(内置 + MCP 统一登记)、JSON Schema 参数校验、读写权限分层、统一执行引擎、审计留痕、MCP 接入、建工单 interrupt 确认流 |
@@ -121,6 +121,19 @@ uv run uvicorn app.main:app --port 8000   # /rag-eval 看报告/台账 + 重跑;
 
 - **单测**(139 个):`uv run pytest`(Milvus Standalone 真连;LLM/嵌入/重排 mock)。
 - **验收入口**:`/rag-eval` 报告页(KPI/五桶分组柱状图/读图句/汇总表 best 行底色/编造个案台账)与终端 `make eval-rag` 同一份产物;`/admin` 第五张卡看最佳 MRR。
+
+## ch05:Workflow + Agent 混合架构(LangGraph)
+
+LangGraph 确定性骨架 + ReAct 主力 Agent:指代消解(透传,ch06 正式版)→ 七类意图分类(单标签结构化输出)→ 7→4 分流(商品咨询/退款退货→知识路,物流/订单/售后→Agent,投诉→安抚+两可选项,闲聊→固定话术)。知识路强制检索(复用 ch04 hybrid_rerank + 两道证据闸,证据强注入 Agent system 弱则兜底拒答+落池);业务路 ReAct 环(步数封顶 6,token 只记账不截停),`create_ticket` 在环内被拦截为「建议动作」不写库;会话状态经 AsyncSqliteSaver 按 thread_id 跨轮持久。转人工/建工单走 SSE `actions` 帧 → 前端渲染两按钮,建工单弹表单(类别必选+描述必填)由用户确认后才 `POST /api/actions/create-ticket` 写库。
+
+```bash
+uv run uvicorn app.main:app --port 8000   # lifespan 起图(checkpointer=data/ch05_checkpoints.sqlite)
+make eval-ch05            # 五验收端到端(需全服务起 + 真实上游)
+uv run pytest             # 单测(163 个,图节点/runtime/API 全 Fake 不打真上游)
+```
+
+- **验收入口**:聊天页问「我要投诉」→ 安抚话术 + 「转人工」「建工单」两按钮(转人工为纯前端模拟,建工单走表单弹窗,成功回显工单号);问「订单1001的物流到哪了」→ Agent 自调 query_logistics 徽章;问「你好呀」→ 固定话术零工具;复杂问(尾号+发货)→ ReAct 多步后收敛。
+- **接口红线已钉死**(scripts/smoke_langgraph.py):`astream(stream_mode=["messages","updates"])` 产出 `(mode, chunk)`,delta 按 `metadata.langgraph_node` 过滤,`updates` 拿 citations/actions。
 
 ## 技术栈
 
