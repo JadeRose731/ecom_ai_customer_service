@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite
+.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05
 
 dev:
 	./scripts/dev.sh
@@ -73,3 +73,7 @@ dev-vectors:
 # ch04:裁判一致性回归(台账已处置个案原样重放;不一致退出码 1,需真实上游)
 judge-check:
 	PYTHONPATH=. uv run python scripts/judge_check.py
+
+# ch05:五验收端到端评估(需全服务起 + 真实上游;走 /api/agent 看工具轨迹与建议动作)
+eval-ch05:
+	PYTHONPATH=. uv run python scripts/eval_ch05.py
