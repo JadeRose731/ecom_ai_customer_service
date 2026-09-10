@@ -1,4 +1,6 @@
+import logging
 import pathlib
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -12,8 +14,20 @@ from app.api.jobs import router as jobs_router
 from app.api.kb import router as kb_router
 from app.api.admin import router as admin_router
 from app.api.rageval import router as rageval_router
+from app.graph import runtime
 
-app = FastAPI(title="MewHelp", version="0.1.0")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # ch05:起图(checkpointer 打开 + setup + 编译)。失败即启动失败,不带病服务。
+    await runtime.init_graph()
+    yield
+    await runtime.close_graph()
+
+
+app = FastAPI(title="MewHelp", version="0.1.0", lifespan=lifespan)
 app.include_router(chat_router)
 app.include_router(extract_router)
 app.include_router(agent_router)
