@@ -12,7 +12,7 @@ from app.core import query_understanding, retrieval, selfcheck
 from app.core.llm import get_chat_model
 from app.core.prompts import (
     AGENT_SYSTEM, CHITCHAT_REPLY_TEXT, COMPLAINT_REPLY_TEXT, FALLBACK_REPLY_TEXT,
-    REFUND_JUDGE_HINT,
+    REFUND_JUDGE_HINT, SCRIPT_REPLY_CHITCHAT, SCRIPT_REPLY_OTHER,
 )
 from app.db import repository
 from app.graph.routing import INTENT_TO_ROUTE
@@ -70,6 +70,13 @@ async def fallback_reply(state) -> dict:
         state.get("conversation_id"), _user_text(state), "retrieval_low_conf", reason
     )
     return {"answer": FALLBACK_REPLY, "trace": {"route": "fallback"}}
+
+
+async def script_reply(state) -> dict:
+    """闲聊/其他 兜底话术(零模型):按 intent 分文案——闲聊把话题引回产品,其他请用户说具体些。
+    分流后立即命中、不进 Agent。(与 ch05 知识路证据弱的 fallback_reply 是两码事,勿混。)"""
+    text = SCRIPT_REPLY_OTHER if state.get("intent") == "其他" else SCRIPT_REPLY_CHITCHAT
+    return {"answer": text, "trace": {"route": "fallback_script"}}
 
 
 async def resolve_reference(state) -> dict:
@@ -210,7 +217,7 @@ async def agent_llm(state, config=None) -> dict:
 
 
 async def agent_tools(state) -> dict:
-    """ReAct 行动步:执行工具并回灌结果。create_ticket 拦截为『提议』——不写库,
+    """ReAct 行动步:执行工具并回灌结果。create_ticket/submit_refund 均拦截为『提议』——不写库,
     转成前端可选项,并回一条合成 ToolMessage 让模型收敛(真正写库在按钮端点)。"""
     last = state["messages"][-1]
     tool_msgs = []

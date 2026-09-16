@@ -152,3 +152,13 @@ def test_agent_messages_knowledge_path_still_injects_evidence():
         "route": "knowledge", "evidence": "[1] 运费: 满99包邮",
         "messages": [HumanMessage("运费多少")]})
     assert "满99包邮" in msgs[0].content                     # 放宽条件后知识路不回归
+
+
+@pytest.mark.asyncio
+async def test_script_reply_by_intent():
+    from app.core.prompts import SCRIPT_REPLY_CHITCHAT, SCRIPT_REPLY_OTHER
+    chit = await nodes.script_reply({"intent": "闲聊"})
+    assert chit["answer"] == SCRIPT_REPLY_CHITCHAT
+    assert chit["trace"]["route"] == "fallback_script"
+    other = await nodes.script_reply({"intent": "其他"})
+    assert other["answer"] == SCRIPT_REPLY_OTHER
