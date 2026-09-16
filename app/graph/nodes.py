@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 
@@ -11,6 +12,7 @@ from app.core import query_understanding, retrieval, selfcheck
 from app.core.llm import get_chat_model
 from app.core.prompts import (
     AGENT_SYSTEM, CHITCHAT_REPLY_TEXT, COMPLAINT_REPLY_TEXT, FALLBACK_REPLY_TEXT,
+    REFUND_JUDGE_HINT,
 )
 from app.db import repository
 from app.graph.routing import INTENT_TO_ROUTE
@@ -188,10 +190,12 @@ _KNOWLEDGE_EVIDENCE_HINT = (
 
 
 def _agent_messages(state) -> list:
-    """system(知识路拼证据) + 跨轮历史。"""
+    """system(有证据就拼,知识路/退款路通用;退款路再拼 order_data + 判定指令) + 跨轮历史。"""
     sys = AGENT_SYSTEM
-    if state.get("route") == "knowledge" and state.get("evidence"):
-        sys = AGENT_SYSTEM + _KNOWLEDGE_EVIDENCE_HINT + state["evidence"]
+    if state.get("evidence"):
+        sys = sys + _KNOWLEDGE_EVIDENCE_HINT + state["evidence"]
+    if state.get("route") == "refund_flow":
+        sys = sys + REFUND_JUDGE_HINT + json.dumps(state.get("order_data", {}), ensure_ascii=False)
     return [SystemMessage(sys), *state.get("messages", [])]
 
 
@@ -219,6 +223,13 @@ async def agent_tools(state) -> dict:
             tool_msgs.append(ToolMessage(
                 content="已把『建工单』选项交给用户自行确认。请用一句话简要说明并停止,不要再调用任何工具。",
                 tool_call_id=tc["id"], name="create_ticket"))
+        elif tc["name"] == "submit_refund":
+            actions.append({"type": "refund_form",
+                            "draft": {"order_id": tc["args"].get("order_id", ""),
+                                      "reason": tc["args"].get("reason")}})
+            tool_msgs.append(ToolMessage(
+                content="已把『提交退款工单』选项交给用户确认。请用一句话说明这一单可以退款并停止,不要再调用任何工具。",
+                tool_call_id=tc["id"], name="submit_refund"))
         else:
             run = await execute_tool_call(tc, state.get("conversation_id", 0))
             tool_msgs.append(run.tool_message)
