@@ -46,3 +46,48 @@ async def test_resolve_reference_rewrites_with_history(monkeypatch):
         HumanMessage("蓝牙耳机什么时候到"), AIMessage("预计明天"), HumanMessage("这个能退吗")]})
     assert out["resolved_query"] == "蓝牙耳机还能申请退货吗"
     assert out["trace"]["coref"] == "rewrite"
+
+
+def test_extract_order_id():
+    assert nodes._extract_order_id("订单1001的物流") == "1001"
+    assert nodes._extract_order_id("尾号 20260701 那单") == "20260701"
+    assert nodes._extract_order_id("我要退货") is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_order_uses_id_in_query(monkeypatch):
+    out = await nodes.fetch_order({"resolved_query": "订单1001能退吗", "user_id": "u1"})
+    assert out["order_id"] == "1001"
+    assert out["order_data"]["order_id"] == "1001"          # order_snapshot 同源
+    assert out["trace"]["fetch_order"]["order_id"] == "1001"
+
+
+@pytest.mark.asyncio
+async def test_fetch_order_interrupts_when_missing(monkeypatch):
+    # interrupt() 只能在编译图内跑(Task 1 冒烟 D:图外直接调是 RuntimeError),
+    # 故缺单路径经最小编译图 + InMemorySaver ainvoke 测真实中断 surface。
+    monkeypatch.setattr(nodes.business, "list_user_orders",
+                        lambda uid: [{"order_id": "1001", "product": "猫粮", "status": "已签收", "amount": 99}])
+    from langgraph.graph import START, END, StateGraph
+    from langgraph.checkpoint.memory import InMemorySaver
+    from app.graph.state import ConversationState
+    b = StateGraph(ConversationState)
+    b.add_node("fetch_order", nodes.fetch_order)
+    b.add_edge(START, "fetch_order")
+    b.add_edge("fetch_order", END)
+    graph = b.compile(checkpointer=InMemorySaver())
+    out = await graph.ainvoke({"resolved_query": "我要退款", "user_id": "u1"},
+                              {"configurable": {"thread_id": "t-fetch"}})
+    payload = out["__interrupt__"][0].value      # Task 1 冒烟 A/C 钉死此取法
+    assert payload["type"] == "select_order"
+    assert payload["orders"][0]["order_id"] == "1001"
+
+
+def test_list_user_orders_stable_and_queryable():
+    from app.tools import business
+    a = business.list_user_orders("u-42")
+    b = business.list_user_orders("u-42")
+    assert a == b and len(a) >= 2                            # 同 user 稳定
+    # 选中即可 query_order(同源快照)
+    snap = business.order_snapshot(a[0]["order_id"])
+    assert snap["order_id"] == a[0]["order_id"] and snap["product"] == a[0]["product"]

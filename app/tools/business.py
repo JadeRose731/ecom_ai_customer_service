@@ -18,9 +18,8 @@ class ProductInput(BaseModel):
 class LogisticsInput(BaseModel):
     order_id: str = Field(description="订单号,用于查询该订单的物流轨迹")
 
-@tool(args_schema=OrderInput)
-async def query_order(order_id: str) -> dict:
-    """查询订单的状态、金额、下单时间和商品名。用于用户询问某个订单情况时。"""
+def order_snapshot(order_id: str) -> dict:
+    """订单快照(纯函数,随机种子固定 → 同 order_id 稳定)。query_order 工具与 fetch_order 节点同源。"""
     rng = random.Random(f"order:{order_id}")
     return {
         "order_id": order_id,
@@ -28,7 +27,28 @@ async def query_order(order_id: str) -> dict:
         "amount": rng.randint(50, 2000),
         "created_at": f"2026-07-{rng.randint(1, 12):02d} 10:00",
         "product": rng.choice(["智能猫砂盆", "猫粮 5kg", "猫爬架", "自动饮水机"]),
+        "tracking_no": f"SF{rng.randint(10**11, 10**12 - 1)}",
     }
+
+
+def list_user_orders(user_id: str) -> list[dict]:
+    """按 user_id 稳定列出该用户的 2-4 笔订单(mock,不落库)。每笔用 order_snapshot 同源,
+    前端选中后回填 order_id 即可 query_order。"""
+    rng = random.Random(f"user_orders:{user_id}")
+    ids = [str(rng.randint(1000, 9999)) for _ in range(rng.randint(2, 4))]
+    out = []
+    for oid in ids:
+        s = order_snapshot(oid)
+        out.append({"order_id": oid, "product": s["product"],
+                    "status": s["status"], "amount": s["amount"]})
+    return out
+
+
+@tool(args_schema=OrderInput)
+async def query_order(order_id: str) -> dict:
+    """查询订单的状态、金额、下单时间、商品名和物流单号(tracking_no)。用于用户询问某个订单情况时。
+    要查物流轨迹,需先用本工具拿到订单的 tracking_no,再把它传给 query_logistics。"""
+    return order_snapshot(order_id)
 
 @tool(args_schema=ProductInput)
 async def query_product(product_name: str) -> dict:
