@@ -34,6 +34,8 @@ async def chat(req: ChatRequest):
                     yield _sse({"delta": ev["text"]})
                 elif ev["type"] == "citations":
                     yield _sse({"event": "citations", "items": ev["items"]})
+                elif ev["type"] == "interrupt":
+                    yield _sse({"event": "interrupt", "kind": ev["kind"], "orders": ev["orders"]})
                 elif ev["type"] == "actions":
                     yield _sse({"event": "actions", "items": ev["items"]})
                 elif ev["type"] == "done":

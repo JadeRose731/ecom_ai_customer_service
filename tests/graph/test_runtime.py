@@ -104,6 +104,37 @@ async def test_resume_turn_drives_command(monkeypatch):
     assert out["conversation_id"] == 5 and out["state"]["answer"] == "这一单可以退款"
 
 
+@pytest.mark.asyncio
+async def test_stream_resume_missing_conversation_raises(monkeypatch):
+    async def fake_get(cid): return None
+    monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
+    with pytest.raises(runtime.ConversationNotFound):
+        async for _ in runtime.stream_resume(999, "1001"):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_stream_resume_passes_command(monkeypatch):
+    from langchain_core.messages import AIMessage
+    from langgraph.types import Command
+    seen = {}
+
+    class FakeGraph:
+        async def astream(self, inp, config, stream_mode=None):
+            seen["is_command"] = isinstance(inp, Command)
+            seen["resume"] = getattr(inp, "resume", None)
+            yield ("messages", (AIMessage("这一单可以退款"), {"langgraph_node": "agent_llm"}))
+
+    async def fake_get(cid): return object()
+    monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
+    monkeypatch.setattr(runtime, "get_graph", lambda: FakeGraph())
+    events = [e async for e in runtime.stream_resume(5, "1001")]
+    assert seen["is_command"] and seen["resume"] == "1001"
+    deltas = [e["text"] for e in events if e["type"] == "delta"]
+    assert "这一单可以退款" in deltas
+    assert events[-1]["type"] == "done" and events[-1]["conversation_id"] == 5
+
+
 def test_dedup_actions_keep_first():
     a1 = {"type": "create_ticket", "draft": {"title": "查物流"}}
     a2 = {"type": "create_ticket", "draft": {"title": "查物流"}}

@@ -24,3 +24,8 @@ class CreateRefundRequest(BaseModel):
 class CreateRefundResponse(BaseModel):
     ticket_no: str
     status: str = "退款申请已提交"
+
+
+class ResumeRequest(BaseModel):
+    conversation_id: int
+    order_id: str = Field(min_length=1)
