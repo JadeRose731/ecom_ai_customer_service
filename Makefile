@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05
+.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt
 
 dev:
 	./scripts/dev.sh
@@ -77,3 +77,7 @@ judge-check:
 # ch05:五验收端到端评估(需全服务起 + 真实上游;走 /api/agent 看工具轨迹与建议动作)
 eval-ch05:
 	PYTHONPATH=. uv run python scripts/eval_ch05.py
+
+# ch06:interrupt/resume 中断 surface 红线冒烟(纯 interrupt 节点,不需要上游)
+smoke-interrupt:
+	PYTHONPATH=. uv run python scripts/smoke_interrupt.py
