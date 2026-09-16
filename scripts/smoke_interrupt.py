@@ -82,6 +82,7 @@ async def main():
                 # messages 模式:chunk 是 (message_chunk, metadata)
                 print("  MSG chunk type=", type(chunk[0]).__name__, "node=", chunk[1].get("langgraph_node"))
         print("C updates chunk 是否出现 __interrupt__ 键:", upd_interrupt_seen)
+        assert upd_interrupt_seen, "C: 中断未以 updates chunk {'__interrupt__': (Interrupt(...),)} 浮出"
 
         # C') 流式后探 pending(备用探测路径)
         snap = await graph.aget_state(config2)
@@ -121,7 +122,7 @@ async def section_d():
         print("D1 GraphInterrupt args=", e.args, "first.value=", e.args[0][0].value if e.args else None)
     except AssertionError:
         raise
-    except Exception as e:  # noqa: BLE001 —— 记录真实异常类型,这正是冒烟要钉死的
+    except Exception as e:  # noqa: BLE001 —— 观测型宽松 catch 仅限 D1:裸调预期抛 RuntimeError,记录真实形状即结论
         print(f"D1 实际抛 {type(e).__module__}.{type(e).__name__}: {e}")
 
     # D2) 带最小 runnable 上下文(假 __pregel_scratchpad)——Task 7 纯单测可直接复制的取法
@@ -147,14 +148,13 @@ async def section_d():
     var_child_runnable_config.set(fake_cfg)
     try:
         await ask_order({"messages": []})
-        raise AssertionError("D2: interrupt() 未抛 GraphInterrupt,单测取法不成立")
     except GraphInterrupt as e:
         print("D2 GraphInterrupt args=", e.args)
         print("D2 取值路径: e.args[0][0].value =", e.args[0][0].value, "| e.args[0][0].id =", e.args[0][0].id)
-    except AssertionError:
-        raise
-    except Exception as e:  # noqa: BLE001
-        print(f"D2 实际抛 {type(e).__module__}.{type(e).__name__}: {e}")
+    else:
+        # fail-fast:GraphInterrupt 以外的任何异常(如内部键名改名导致的 KeyError)不经此处、
+        # 直接上抛让冒烟非零退出;连 GraphInterrupt 都没抛同样算假绿,必须显式失败。
+        raise AssertionError("D2: interrupt() 未抛 GraphInterrupt,单测取法不成立")
 
 
 if __name__ == "__main__":
