@@ -35,7 +35,9 @@ async def chat(req: ChatRequest):
                 elif ev["type"] == "citations":
                     yield _sse({"event": "citations", "items": ev["items"]})
                 elif ev["type"] == "interrupt":
-                    yield _sse({"event": "interrupt", "kind": ev["kind"], "orders": ev["orders"]})
+                    # R15:中断流无 done 帧,cid 随 interrupt 帧下发,首问即中断也可续跑
+                    yield _sse({"event": "interrupt", "kind": ev["kind"], "orders": ev["orders"],
+                                "conversation_id": ev["conversation_id"]})
                 elif ev["type"] == "actions":
                     yield _sse({"event": "actions", "items": ev["items"]})
                 elif ev["type"] == "done":

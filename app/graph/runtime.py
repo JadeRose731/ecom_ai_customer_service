@@ -145,8 +145,10 @@ async def _stream_events(cid: int, stream_source) -> AsyncIterator[dict]:
         elif mode == "updates":
             if "__interrupt__" in chunk:
                 payload = chunk["__interrupt__"][0].value
+                # R15:中断流无 done 帧,conversation_id 必须随 interrupt 帧下发,
+                # 否则全新会话首问即中断时前端拿不到 cid、无从 resume
                 yield {"type": "interrupt", "kind": payload.get("type", ""),
-                       "orders": payload.get("orders", [])}
+                       "orders": payload.get("orders", []), "conversation_id": cid}
                 return  # 图已暂停,结束本次流(前端点选后走 resume 续流)
             for node, upd in chunk.items():
                 if not isinstance(upd, dict):

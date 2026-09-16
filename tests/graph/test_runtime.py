@@ -84,6 +84,8 @@ async def test_stream_turn_emits_interrupt_event(monkeypatch):
     intr = [e for e in events if e["type"] == "interrupt"]
     assert intr and intr[0]["kind"] == "select_order"
     assert intr[0]["orders"] == [{"order_id": "1001"}]
+    # R15:interrupt 帧补带 conversation_id(中断流无 done 帧,全新会话首问即中断时前端靠它拿 cid)
+    assert intr[0]["conversation_id"] == 9
 
 
 @pytest.mark.asyncio

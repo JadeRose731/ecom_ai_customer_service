@@ -536,6 +536,11 @@ async function consumeSSE(resp, shell) {
       // ch05:转人工/建工单/退款表单等建议动作,流结束后渲染
       pendingActions = payload.items || [];
     } else if (payload.event === 'interrupt') {
+      // R15:interrupt 帧自带 conversation_id(中断流无 done 帧),优先采用;done 帧处理保留为常规回退
+      if (payload.conversation_id !== undefined) {
+        conversationId = String(payload.conversation_id);
+        localStorage.setItem(CID_KEY, conversationId);
+      }
       if (!shell.interrupted) renderOrderCards(shell, payload.orders || []);
     } else if (payload.event === 'done') {
       conversationId = String(payload.conversation_id);
@@ -613,12 +618,7 @@ function renderOrderCards(shell, orders) {
     card.addEventListener('click', () => {
       if (card.disabled) return;
       const cid = getConversationId();
-      if (!cid) {
-        // 契约缺口兜底:conversation_id 只随 done 帧下发,而中断流没有 done——
-        // 全新会话首问即 interrupt 时前端拿不到 cid,无从 resume,提示先建立会话
-        addBotText('会话尚未建立,请先随便发一条消息,再重新发起退款');
-        return;
-      }
+      if (!cid) return; // R15 之前的历史中断残留卡片可能无 cid,无从 resume,静默忽略
       // 点选后全部卡片组禁用灰态(含历史中断残留的卡片组),当前卡片高亮
       document.querySelectorAll('.order-card').forEach((c) => { c.disabled = true; });
       card.classList.add('selected');

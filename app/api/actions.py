@@ -61,7 +61,9 @@ async def resume_action(req: ResumeRequest):
                 elif ev["type"] == "actions":
                     yield _sse({"event": "actions", "items": ev["items"]})
                 elif ev["type"] == "interrupt":
-                    yield _sse({"event": "interrupt", "kind": ev["kind"], "orders": ev["orders"]})
+                    # R15:契约与 /api/chat 同构(resume 场景前端已有 cid,此字段为冗余无害)
+                    yield _sse({"event": "interrupt", "kind": ev["kind"], "orders": ev["orders"],
+                                "conversation_id": ev["conversation_id"]})
                 elif ev["type"] == "done":
                     yield _sse({"event": "done", "conversation_id": ev["conversation_id"]})
         except runtime.ConversationNotFound:

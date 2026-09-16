@@ -1,4 +1,6 @@
 # tests/test_refund_api.py — ch06 退款表单提交端点(复用 tickets 表,ticket_type='退款')
+import json
+
 from app.api import actions
 
 
@@ -24,6 +26,9 @@ async def test_create_refund_rejects_bad_reason(client):
 async def test_resume_endpoint_streams(client, monkeypatch):
     async def fake_stream_resume(cid, resume_value):
         assert cid == 3 and resume_value == "1001"
+        # R15:interrupt 事件带 conversation_id,端点帧应透传(契约与 /api/chat 同构)
+        yield {"type": "interrupt", "kind": "select_order",
+               "orders": [{"order_id": "1001"}], "conversation_id": 3}
         yield {"type": "delta", "text": "这一单可以退款"}
         yield {"type": "actions", "items": [{"type": "refund_form", "draft": {"order_id": "1001"}}]}
         yield {"type": "done", "conversation_id": 3}
@@ -34,3 +39,11 @@ async def test_resume_endpoint_streams(client, monkeypatch):
     body = r.text
     assert "这一单可以退款" in body
     assert "refund_form" in body and "[DONE]" in body
+    # R15:interrupt SSE 帧含 conversation_id(解析验证,不依赖 json.dumps 分隔符)
+    intr_frames = [ln[len("data: "):] for ln in body.splitlines()
+                   if ln.startswith("data: ") and '"interrupt"' in ln]
+    assert intr_frames, "body 缺 interrupt 帧"
+    payload = json.loads(intr_frames[0])
+    assert payload["kind"] == "select_order"
+    assert payload["conversation_id"] == 3
+    assert payload["orders"] == [{"order_id": "1001"}]
