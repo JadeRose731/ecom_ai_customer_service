@@ -91,3 +91,34 @@ def test_list_user_orders_stable_and_queryable():
     # 选中即可 query_order(同源快照)
     snap = business.order_snapshot(a[0]["order_id"])
     assert snap["order_id"] == a[0]["order_id"] and snap["product"] == a[0]["product"]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_policy_expands_dedups_merges(monkeypatch):
+    async def fake_expand(q):
+        return ["退货政策", "无理由退换货", "退货时限"]
+    # 三条 query 各自的召回:id=1 在两条里出现(取高分),id=2 只在一条
+    per_query = {
+        "退货政策": [{"id": 1, "question": "退货", "answer": "7天无理由", "rerank_score": 0.7,
+                     "section_path": "政策/退货", "content_type": "policy"}],
+        "无理由退换货": [{"id": 1, "question": "退货", "answer": "7天无理由", "rerank_score": 0.9,
+                       "section_path": "政策/退货", "content_type": "policy"},
+                      {"id": 2, "question": "运费", "answer": "质量问题商家承担", "rerank_score": 0.6,
+                       "section_path": "政策/运费", "content_type": "policy"}],
+        "退货时限": [],
+    }
+    async def fake_search(q, **k):
+        return per_query.get(q, [])
+    monkeypatch.setattr(nodes.query_understanding, "expand_queries", fake_expand)
+    monkeypatch.setattr(nodes.retrieval, "search_knowledge", fake_search)
+    monkeypatch.setattr(nodes.retrieval, "arrange_head_tail", lambda h: h)
+
+    out = await nodes.retrieve_policy({"resolved_query": "这个订单能退吗",
+                                       "order_data": {"status": "已签收"}})
+    # 去重:id=1 只保留一次(取 0.9),id=2 保留;共 2 条
+    assert len(out["citations"]) == 2
+    ids = [c["id"] for c in out["citations"]]
+    assert ids == [1, 2]                              # 按 rerank_score 降序(0.9, 0.6)
+    assert "[1]" in out["evidence"] and "[2]" in out["evidence"]
+    assert out["trace"]["retrieve_policy"]["hits"] == 2
+    assert out["trace"]["retrieve_policy"]["queries"] == ["退货政策", "无理由退换货", "退货时限"]
