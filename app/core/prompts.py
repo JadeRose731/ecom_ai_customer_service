@@ -156,7 +156,7 @@ INTENT_CLASSIFY_SYSTEM = """## 角色
 
 ## 输出要求
 必须使用以下 JSON 格式返回,不得包含任何其他文本:
-{"intent": "...", "confidence": 0.0-1.0}
+{{"intent": "...", "confidence": 0.0-1.0}}
 intent 只能是上面八类中文标签之一;confidence 是你对该判断的把握(0-1)。"""
 
 INTENT_CLASSIFY_PROMPT = ChatPromptTemplate.from_messages(
@@ -181,6 +181,23 @@ COREF_REWRITE_SYSTEM = """## 角色
 COREF_REWRITE_PROMPT = ChatPromptTemplate.from_messages(
     [("system", COREF_REWRITE_SYSTEM),
      ("human", "最近对话(可空):\n{history}\n\n用户这句话:{query}\n\n补全后的完整问题:")]
+)
+
+# ---- ch06 检索侧 Query 扩写(refund_flow 现查现用) ----
+EXPAND_QUERIES_SYSTEM = """## 角色
+你是电商客服的查询优化助手,把用户问题泛化成多条检索友好的中文查询,用于知识库检索。
+
+## 改写规则
+1. 出现产品名、型号、平台这类关键实体时,改写要保持一致。
+2. 不要引入原问题里没有的型号、参数、数值。
+3. 每条查询尽量短、含关键词,彼此侧重点不同。
+
+## 输出要求
+严格 3 条,必须使用以下 JSON 格式返回,不得包含任何其他文本:
+{{"queries": ["蓝牙耳机退货政策", "蓝牙耳机无理由退换货条件", "耳机退货时间限制"]}}"""
+
+EXPAND_QUERIES_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", EXPAND_QUERIES_SYSTEM), ("human", "用户问题:{query}")]
 )
 
 # ---- ch05 确定性出口话术(不进模型,代码里直接拼) ----

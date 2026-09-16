@@ -1,5 +1,5 @@
 """指代消解标注评估:多轮带指代补全 + 已完整透传。需上游可用。
-用法:.venv/bin/python -m scripts.eval_coref"""
+用法:PYTHONUTF8=1 uv run python -m scripts.eval_coref"""
 import asyncio
 
 from app.core.coref import resolve

@@ -1,5 +1,5 @@
 """意图四件套标注评估:八类判对率 + confidence 可解析 + 怪问题落其他 + 多轮漂移。需上游可用。
-用法:.venv/bin/python -m scripts.eval_intent"""
+用法:PYTHONUTF8=1 uv run python -m scripts.eval_intent"""
 import asyncio
 
 from app.core.intent import classify
