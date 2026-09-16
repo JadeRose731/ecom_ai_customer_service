@@ -10,6 +10,7 @@ from app.core.prompts import (
     AGENT_SYSTEM, CHITCHAT_REPLY_TEXT, COMPLAINT_REPLY_TEXT, FALLBACK_REPLY_TEXT,
 )
 from app.db import repository
+from app.graph.routing import INTENT_TO_ROUTE
 from app.tools.infra import execute_tool_call
 from app.tools.registry import get_all_tools
 
@@ -25,6 +26,19 @@ def _user_text(state) -> str:
         if isinstance(m, HumanMessage):
             return m.content or ""
     return ""
+
+
+def _history_text(state, max_turns: int = 6) -> str:
+    """把最近若干轮 human/ai 消息(不含本轮最后一条 human)压成紧凑文本,供 coref/意图读上下文。"""
+    msgs = state.get("messages", [])
+    prior = msgs[:-1] if msgs else []
+    lines = []
+    for m in prior[-max_turns:]:
+        role = "用户" if isinstance(m, HumanMessage) else "客服"
+        text = m.content if isinstance(m.content, str) else ""
+        if text:
+            lines.append(f"{role}:{text}")
+    return "\n".join(lines)
 
 
 async def chitchat_reply(state) -> dict:
@@ -58,9 +72,15 @@ async def coref(state) -> dict:
 
 
 async def classify_intent(state) -> dict:
-    """意图识别:单标签七类。"""
-    intent = await intent_mod.classify(_user_text(state))
-    return {"intent": intent, "trace": {"intent": intent}}
+    """意图四件套:八类 + confidence + 「其他」兜底。吃 resolved_query(空则回落原话)+ 最近历史
+    判当前意图(应对物流→退款→物流漂移)。把归属出口 route 落进 State(供 _agent_messages 判注入、
+    log 留痕;route_by_intent 条件边按同一 INTENT_TO_ROUTE 分流,单一来源不漂移)。"""
+    query = state.get("resolved_query") or _user_text(state)
+    r = await intent_mod.classify(query, _history_text(state))
+    intent, conf = r["intent"], r["confidence"]
+    route = INTENT_TO_ROUTE.get(intent, "business")
+    return {"intent": intent, "intent_confidence": conf, "route": route,
+            "trace": {"intent": intent, "intent_confidence": conf, "route": route}}
 
 
 async def forced_rag(state) -> dict:

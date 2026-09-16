@@ -30,5 +30,10 @@ class Settings(BaseSettings):
     max_agent_steps: int = 6              # ReAct 环最大步数(封顶,超则兜底)
     # token 花销不在环里卡:那是成本控制,归 ch09 跟 Langfuse 的账一起看
     checkpointer_db_path: str = "data/ch05_checkpoints.sqlite"  # LangGraph checkpointer(data/*.db* 已 gitignore)
+    # ch06 意图识别模型配置(先求准:默认大模型;降级路仅种子,本章不实现运行时)
+    intent_model: str = ""            # 意图识别模型名;空=回落 chat_model
+    intent_small_model: str = ""      # 降级路小模型(种子,未接运行时)
+    intent_mode: str = "accuracy"     # accuracy=只用大模型;cost=小模型判→低置信升级大模型(未实现)
+    intent_conf_threshold: float = 0.6  # cost 模式升级阈值(种子)
 
 settings = Settings()

@@ -14,7 +14,7 @@ class ConversationState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]  # 跨轮历史,checkpointer 续接
     user_id: str
     conversation_id: int
-    intent: str            # 七类之一
+    intent: str            # 八类之一(含「其他」)
     resolved_query: str    # 指代消解+改写后的完整问句(下游检索/判意图都用它)
     intent_confidence: float  # 意图 JSON 的 confidence(0-1)
     order_id: str          # refund_flow:抽到/点选回填的订单号
