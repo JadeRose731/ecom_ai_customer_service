@@ -56,8 +56,14 @@ async def _ensure_conversation(user_id: str, conversation_id: int | None) -> int
 
 
 def _graph_input(user_id: str, message: str, cid: int) -> dict:
+    # 每轮入口把输出通道清零,防上一轮残留跨轮泄漏(ch05 C1);
+    # resume 走 Command(resume=...) 不经此函数,order_id 回填不受影响
     return {"messages": [HumanMessage(message)], "user_id": user_id,
-            "conversation_id": cid, "steps": 0, "tokens_used": 0}
+            "conversation_id": cid, "steps": 0, "tokens_used": 0,
+            "intent": "", "route": "", "evidence": "", "citations": [],
+            "evidence_strong": False, "answer": "", "suggested_actions": [],
+            "resolved_query": "", "intent_confidence": 0.0,
+            "order_id": "", "order_data": {}}
 
 
 async def run_turn(user_id, message, conversation_id) -> dict:

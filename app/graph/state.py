@@ -15,7 +15,11 @@ class ConversationState(TypedDict, total=False):
     user_id: str
     conversation_id: int
     intent: str            # 七类之一
-    route: str             # knowledge | business | complaint | chitchat
+    resolved_query: str    # 指代消解+改写后的完整问句(下游检索/判意图都用它)
+    intent_confidence: float  # 意图 JSON 的 confidence(0-1)
+    order_id: str          # refund_flow:抽到/点选回填的订单号
+    order_data: dict       # refund_flow:query_order 查到的订单数据
+    route: str             # escalate | fallback_script | knowledge | refund_flow | business
     evidence: str          # 知识路编号证据文本
     citations: list        # 引用 chunk(前端可点)
     evidence_strong: bool  # 生成前证据闸信号

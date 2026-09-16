@@ -62,3 +62,20 @@ async def test_stream_turn_maps_events(monkeypatch):
     assert any(e["type"] == "citations" for e in events)
     assert any(e["type"] == "actions" for e in events)
     assert kinds[-1] == "done" and events[-1]["conversation_id"] == 7
+
+
+def test_graph_input_resets_per_turn_output_channels():
+    """入口把上一轮输出通道全部清零,防跨轮泄漏(ch05 C1)。"""
+    inp = runtime._graph_input("u1", "你好", 42)
+    # ch05 输出通道
+    assert inp["intent"] == ""
+    assert inp["route"] == ""
+    assert inp["evidence"] == ""
+    assert inp["citations"] == []
+    assert inp["evidence_strong"] is False
+    assert inp["answer"] == ""
+    assert inp["suggested_actions"] == []
+    assert inp["steps"] == 0 and inp["tokens_used"] == 0
+    # ch06 四个无 reducer 标量
+    assert inp["resolved_query"] == "" and inp["intent_confidence"] == 0.0
+    assert inp["order_id"] == "" and inp["order_data"] == {}
