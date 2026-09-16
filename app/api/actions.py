@@ -5,7 +5,9 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.db import repository
-from app.schemas.actions import CreateTicketRequest, CreateTicketResponse
+from app.schemas.actions import (
+    CreateRefundRequest, CreateRefundResponse, CreateTicketRequest, CreateTicketResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -21,3 +23,15 @@ async def create_ticket_action(req: CreateTicketRequest) -> CreateTicketResponse
         logger.exception("建工单失败 conv=%s", req.conversation_id)
         raise HTTPException(status_code=503, detail="工单系统暂时不可用,请稍后重试")
     return CreateTicketResponse(ticket_no=ticket_no)
+
+
+@router.post("/api/actions/create-refund", response_model=CreateRefundResponse)
+async def create_refund_action(req: CreateRefundRequest) -> CreateRefundResponse:
+    """退款表单提交:写 tickets(ticket_type='退款'),描述带订单号 + 固定类目原因。复用 ch02 工单能力。"""
+    desc = f"退款申请 订单号={req.order_id} 原因={req.reason}"
+    try:
+        ticket_no = await repository.create_ticket(req.conversation_id, desc, "退款")
+    except SQLAlchemyError:
+        logger.exception("退款单创建失败 conv=%s", req.conversation_id)
+        raise HTTPException(status_code=503, detail="退款系统暂时不可用,请稍后重试")
+    return CreateRefundResponse(ticket_no=ticket_no)

@@ -58,7 +58,7 @@ class Ticket(Base):
         BigInteger, ForeignKey("conversations.id")
     )
     description: Mapped[str] = mapped_column(Text)
-    ticket_type: Mapped[str] = mapped_column(Enum("售后", "投诉", "咨询"))
+    ticket_type: Mapped[str] = mapped_column(Enum("售后", "投诉", "咨询", "退款"))
     status: Mapped[str] = mapped_column(
         Enum("待处理", "已处理"), server_default="待处理"
     )

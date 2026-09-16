@@ -13,3 +13,14 @@ class CreateTicketRequest(BaseModel):
 class CreateTicketResponse(BaseModel):
     ticket_no: str
     status: str = "已转人工"
+
+
+class CreateRefundRequest(BaseModel):
+    conversation_id: int
+    order_id: str = Field(min_length=1)
+    reason: Literal["七天无理由", "质量问题", "发错货", "不想要了", "其他"]
+
+
+class CreateRefundResponse(BaseModel):
+    ticket_no: str
+    status: str = "退款申请已提交"
