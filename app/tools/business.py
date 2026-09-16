@@ -40,7 +40,8 @@ def list_user_orders(user_id: str) -> list[dict]:
     for oid in ids:
         s = order_snapshot(oid)
         out.append({"order_id": oid, "product": s["product"],
-                    "status": s["status"], "amount": s["amount"]})
+                    "status": s["status"], "amount": s["amount"],
+                    "tracking_no": s["tracking_no"], "created_at": s["created_at"]})
     return out
 
 

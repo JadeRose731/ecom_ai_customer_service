@@ -89,3 +89,24 @@ async def test_chat_empty_message_422():
     client = make_client()
     resp = await client.post("/api/chat", json={"user_id": "u1", "message": ""})
     assert resp.status_code == 422                # 未进流
+
+
+async def test_chat_interrupt_frame(monkeypatch):
+    """终审 M3:interrupt 流早退契约——SSE body 含 interrupt 帧(kind/orders/conversation_id),
+    无 done 事件帧(图已暂停即早退),结尾仍有 [DONE] 终止帧。"""
+    _patch_stream(monkeypatch, [
+        {"type": "interrupt", "kind": "select_order",
+         "orders": [{"order_id": "1001", "product": "猫粮", "status": "已签收", "amount": 99,
+                     "tracking_no": "SF123456789012", "created_at": "2026-07-03 10:00"}],
+         "conversation_id": 11},                  # 模拟 _stream_events 早退:仅此一条即结束
+    ])
+    client = make_client()
+    events, done, lines = await read_sse(client, {"user_id": "u1", "message": "我要退款"})
+    intr = [e for e in events if e.get("event") == "interrupt"]
+    assert len(intr) == 1
+    assert intr[0]["kind"] == "select_order"
+    assert intr[0]["conversation_id"] == 11
+    assert [o["order_id"] for o in intr[0]["orders"]] == ["1001"]
+    assert '"event": "interrupt"' in "".join(lines)           # body 确实含 interrupt 帧
+    assert not any(e.get("event") == "done" for e in events)  # 早退:无 done 事件帧
+    assert done                                               # 结尾仍有 [DONE]

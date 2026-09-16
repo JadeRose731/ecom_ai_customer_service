@@ -185,6 +185,7 @@ if (!userId) {
 }
 let conversationId = localStorage.getItem(CID_KEY);
 let sending = false;
+let orderPending = false;   // 终审 I1:存在未点选的订单卡片组时拦自由输入(刷新后自然放行)
 
 function appendUser(text) {
   const row = document.createElement('div');
@@ -602,6 +603,7 @@ function getConversationId() {
 
 function renderOrderCards(shell, orders) {
   shell.interrupted = true;
+  orderPending = true;   // 终审 I1:卡片组待点选,期间拦自由输入
   if (!shell.firstDelta) shell.bubble.textContent = '请选择要处理的订单:';
   const group = document.createElement('div');
   group.className = 'order-cards';
@@ -619,6 +621,7 @@ function renderOrderCards(shell, orders) {
       if (card.disabled) return;
       const cid = getConversationId();
       if (!cid) return; // R15 之前的历史中断残留卡片可能无 cid,无从 resume,静默忽略
+      orderPending = false;   // 终审 I1:已点选,解除输入拦截
       // 点选后全部卡片组禁用灰态(含历史中断残留的卡片组),当前卡片高亮
       document.querySelectorAll('.order-card').forEach((c) => { c.disabled = true; });
       card.classList.add('selected');
@@ -650,6 +653,12 @@ async function resumeWithOrder(cid, orderId) {
 async function send() {
   const text = inputEl.value.trim();
   if (!text || sending) return;
+  if (orderPending) {
+    // 终审 I1a:待点选期间拦自由输入——挂起线程收新输入会从节点头重跑上游再暂停,
+    // 不 POST,只提示点选;页面刷新后本标记复位、DOM 清空,任意输入照常收到服务端 interrupt 卡片
+    addBotText('请先点选上方订单卡片完成退款,或点「新会话」重新开始');
+    return;
+  }
   sending = true;
   sendEl.disabled = true;
   inputEl.value = '';
@@ -667,6 +676,7 @@ inputEl.addEventListener('keydown', (e) => {
 document.getElementById('newChat').addEventListener('click', () => {
   conversationId = null;
   localStorage.removeItem(CID_KEY);
+  orderPending = false;   // 终审 I1:新会话重置守卫
   chatEl.innerHTML = '';
   inputEl.focus();
 });

@@ -148,7 +148,7 @@ make eval-ch06            # 四验收端到端(需全服务起 + 真实 key)—�
 uv run pytest             # 单测(195 个,图节点/runtime/API 全 Fake 不打真上游)
 ```
 
-- **三个 prompt eval**(纯 Prompt 评估集,需真实 key)—— 待key:`PYTHONUTF8=1 uv run python -m scripts.eval_intent`(八类判对率 + JSON 越界应为 0 + 退款后多轮漂移应回物流)、`python -m scripts.eval_coref`(透传类必须原样不改、补全类须含上文实体)、`python -m scripts.eval_expand`(核心场景扩写应 3/3 且侧重点不同)。
+- **三个 prompt eval**(纯 Prompt 评估集,需真实 key)—— 待key:`PYTHONUTF8=1 uv run python -m scripts.eval_intent`(八类判对率 + JSON 越界应为 0 + 退款后多轮漂移应回物流)、`PYTHONUTF8=1 uv run python -m scripts.eval_coref`(透传类必须原样不改、补全类须含上文实体)、`PYTHONUTF8=1 uv run python -m scripts.eval_expand`(核心场景扩写应 3/3 且侧重点不同)。
 - **验收入口**:聊天页不带订单号问「我要退款」→ 聊天流弹订单选择器卡片 → 点一张续跑(检索政策 → Agent 判能否退)→ 能退出「提交退款工单」按钮 → 表单提交显示退款单号(前端 interrupt→resume→退款表单全链路);多轮「订单1001到哪了 → 那我想把它退了 → 算了它现在到哪了」意图随上下文漂移,应用日志 grep `ch05 turn` 看 `route=refund_flow` 与 trace `coref` 改写明细——真实验收待 key,命令就位(`make eval-ch06` + 三个 prompt eval)。
 - **接口红线已钉死**(scripts/smoke_interrupt.py):中断时 `ainvoke` 正常返回带 `__interrupt__` 键、`Command(resume=…)` 从被中断节点头重跑、流式中断以 updates chunk 浮出;langgraph 升级后先重跑此冒烟。
 

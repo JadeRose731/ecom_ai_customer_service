@@ -54,7 +54,7 @@ async def complaint_reply(state) -> dict:
          "draft": {"description": _user_text(state), "ticket_type": "投诉"}},
     ]
     return {"answer": COMPLAINT_REPLY, "suggested_actions": actions,
-            "trace": {"route": "complaint"}}
+            "trace": {"route": "escalate"}}
 
 
 async def fallback_reply(state) -> dict:

@@ -17,7 +17,8 @@ class CreateTicketResponse(BaseModel):
 
 class CreateRefundRequest(BaseModel):
     conversation_id: int
-    order_id: str = Field(min_length=1)
+    # 4+ 位纯数字,与 mock 订单域(list_user_orders 1000-9999)/ _extract_order_id 一致
+    order_id: str = Field(min_length=1, max_length=32, pattern=r"^\d{4,}$")
     reason: Literal["七天无理由", "质量问题", "发错货", "不想要了", "其他"]
 
 
@@ -28,4 +29,4 @@ class CreateRefundResponse(BaseModel):
 
 class ResumeRequest(BaseModel):
     conversation_id: int
-    order_id: str = Field(min_length=1)
+    order_id: str = Field(min_length=1, max_length=32, pattern=r"^\d{4,}$")
