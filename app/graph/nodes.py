@@ -3,6 +3,7 @@ import logging
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.config import settings
+from app.core import coref
 from app.core import intent as intent_mod
 from app.core import query_understanding, retrieval, selfcheck
 from app.core.llm import get_chat_model
@@ -66,9 +67,13 @@ async def fallback_reply(state) -> dict:
     return {"answer": FALLBACK_REPLY, "trace": {"route": "fallback"}}
 
 
-async def coref(state) -> dict:
-    """指代消解:本章最简,原样透传(正式版留 ch06)。"""
-    return {"trace": {"coref": "passthrough"}}
+async def resolve_reference(state) -> dict:
+    """指代消解 + Query 改写(合一):吃最近几轮历史把半截话补成完整问句;已完整则透传。
+    写 resolved_query,供 classify_intent 与 refund_flow 检索共用(意图识别不再改写)。"""
+    query = _user_text(state)
+    resolved = await coref.resolve(query, _history_text(state))
+    mode = "rewrite" if resolved != query else "passthrough"
+    return {"resolved_query": resolved, "trace": {"coref": mode}}
 
 
 async def classify_intent(state) -> dict:
