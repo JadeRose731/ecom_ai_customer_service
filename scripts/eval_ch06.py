@@ -40,7 +40,7 @@ async def main():
         for name, ok, detail in results:
             print(f"{'✅' if ok else '❌'} {name} -> {detail}")
 
-    print("\n验收2(意图 JSON 稳定/怪问题落其他):跑 `.venv/bin/python -m scripts.eval_intent`。")
+    print("\n验收2(意图 JSON 稳定/怪问题落其他):跑 `PYTHONUTF8=1 uv run python -m scripts.eval_intent`。")
     print("验收4 前端 interrupt→resume→退款按钮 全链路:见 Task 15 浏览器截图。")
     print("验收1/3 的 coref/intent/route 明细:grep app 日志 `ch05 turn ... intent=.. route=.. trace={..coref..}`。")
 

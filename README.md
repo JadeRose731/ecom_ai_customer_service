@@ -135,6 +135,23 @@ uv run pytest             # 单测(163 个,图节点/runtime/API 全 Fake 不打
 - **验收入口**:聊天页问「我要投诉」→ 安抚话术 + 「转人工」「建工单」两按钮(转人工为纯前端模拟,建工单走表单弹窗,成功回显工单号);问「订单1001的物流到哪了」→ Agent 自调 query_logistics 徽章;问「你好呀」→ 固定话术零工具;复杂问(尾号+发货)→ ReAct 多步后收敛。
 - **接口红线已钉死**(scripts/smoke_langgraph.py):`astream(stream_mode=["messages","updates"])` 产出 `(mode, chunk)`,delta 按 `metadata.langgraph_node` 过滤,`updates` 拿 citations/actions。
 
+## ch06:意图识别与对话管理(coref 改写 + 退款子流程)
+
+骨架升级:指代消解正式版(`resolve_reference`:coref + 口语归一,trace 记 `coref` 是否改写)→ 八类意图 + 置信度分类(`classify(query, history) -> dict`,解析失败/越界落「其他」)→ 5 出口分流(退款退货进确定性子流程 `fetch_order → retrieve_policy(多查询扩写+去重合并)→ 主力 Agent 判可退性`;「其他」/闲聊走 `script_reply` 固定话术)。退款缺订单号时节点内 `interrupt` 弹订单选择器,前端点选 → `/api/actions/resume` 续跑;判可退时 `submit_refund` 拦截为「提交退款工单」按钮 → 表单(原因五选一)→ `POST /api/actions/create-refund` 落库。
+
+```bash
+docker compose up -d      # MySQL + Milvus 三容器
+docker exec -i mewhelp-mysql mysql --default-character-set=utf8mb4 -uroot -proot mewhelp < sql/ch06-ticket-type.sql
+                          # tickets.ticket_type 枚举加「退款」(本章环境已应用,SHOW COLUMNS 见四值中文枚举)
+make smoke-interrupt      # interrupt/resume 中断 surface 红线冒烟(纯 interrupt 节点,不需要上游)
+make eval-ch06            # 四验收端到端(需全服务起 + 真实 key)—— 待key
+uv run pytest             # 单测(195 个,图节点/runtime/API 全 Fake 不打真上游)
+```
+
+- **三个 prompt eval**(纯 Prompt 评估集,需真实 key)—— 待key:`PYTHONUTF8=1 uv run python -m scripts.eval_intent`(八类判对率 + JSON 越界应为 0 + 退款后多轮漂移应回物流)、`python -m scripts.eval_coref`(透传类必须原样不改、补全类须含上文实体)、`python -m scripts.eval_expand`(核心场景扩写应 3/3 且侧重点不同)。
+- **验收入口**:聊天页不带订单号问「我要退款」→ 聊天流弹订单选择器卡片 → 点一张续跑(检索政策 → Agent 判能否退)→ 能退出「提交退款工单」按钮 → 表单提交显示退款单号(前端 interrupt→resume→退款表单全链路);多轮「订单1001到哪了 → 那我想把它退了 → 算了它现在到哪了」意图随上下文漂移,应用日志 grep `ch05 turn` 看 `route=refund_flow` 与 trace `coref` 改写明细——真实验收待 key,命令就位(`make eval-ch06` + 三个 prompt eval)。
+- **接口红线已钉死**(scripts/smoke_interrupt.py):中断时 `ainvoke` 正常返回带 `__interrupt__` 键、`Command(resume=…)` 从被中断节点头重跑、流式中断以 updates chunk 浮出;langgraph 升级后先重跑此冒烟。
+
 ## 技术栈
 
 - **后端**:Python 3.12、FastAPI、LangChain / LangGraph、SQLAlchemy 2.0(异步)、uv
