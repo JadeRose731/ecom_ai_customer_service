@@ -5,9 +5,10 @@ def test_graph_has_all_nodes():
     g = _builder().compile()
     names = set(g.get_graph().nodes)
     for n in ["resolve_reference", "classify_intent", "forced_rag", "confidence_check",
-              "agent_llm", "agent_tools", "complaint_reply", "chitchat_reply",
-              "fallback_reply", "log"]:
+              "agent_llm", "agent_tools", "complaint_reply", "script_reply",
+              "fallback_reply", "fetch_order", "retrieve_policy", "log"]:
         assert n in names, f"缺节点 {n}"
+    assert "chitchat_reply" not in names, "chitchat_reply 应已被 script_reply 取代"
 
 
 def test_graph_compiles_with_checkpointer():

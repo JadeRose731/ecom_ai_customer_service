@@ -11,7 +11,7 @@ from app.core import intent as intent_mod
 from app.core import query_understanding, retrieval, selfcheck
 from app.core.llm import get_chat_model
 from app.core.prompts import (
-    AGENT_SYSTEM, CHITCHAT_REPLY_TEXT, COMPLAINT_REPLY_TEXT, FALLBACK_REPLY_TEXT,
+    AGENT_SYSTEM, COMPLAINT_REPLY_TEXT, FALLBACK_REPLY_TEXT,
     REFUND_JUDGE_HINT, SCRIPT_REPLY_CHITCHAT, SCRIPT_REPLY_OTHER,
 )
 from app.db import repository
@@ -22,7 +22,6 @@ from app.tools.registry import get_all_tools
 
 logger = logging.getLogger(__name__)
 
-CHITCHAT_REPLY = CHITCHAT_REPLY_TEXT
 COMPLAINT_REPLY = COMPLAINT_REPLY_TEXT
 FALLBACK_REPLY = FALLBACK_REPLY_TEXT
 
@@ -45,11 +44,6 @@ def _history_text(state, max_turns: int = 6) -> str:
         if text:
             lines.append(f"{role}:{text}")
     return "\n".join(lines)
-
-
-async def chitchat_reply(state) -> dict:
-    """闲聊:固定话术,零模型调用。"""
-    return {"answer": CHITCHAT_REPLY, "trace": {"route": "chitchat"}}
 
 
 async def complaint_reply(state) -> dict:

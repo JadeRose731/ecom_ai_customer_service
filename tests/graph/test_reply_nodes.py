@@ -5,10 +5,11 @@ from app.graph import nodes
 
 
 @pytest.mark.asyncio
-async def test_chitchat_reply_fixed_no_actions():
-    out = await nodes.chitchat_reply({"messages": [HumanMessage("你好")]})
-    assert out["answer"] == nodes.CHITCHAT_REPLY
-    assert out["trace"]["route"] == "chitchat"
+async def test_script_reply_fixed_no_actions():
+    from app.core.prompts import SCRIPT_REPLY_CHITCHAT
+    out = await nodes.script_reply({"intent": "闲聊"})
+    assert out["answer"] == SCRIPT_REPLY_CHITCHAT
+    assert out["trace"]["route"] == "fallback_script"
     assert not out.get("suggested_actions")
 
 

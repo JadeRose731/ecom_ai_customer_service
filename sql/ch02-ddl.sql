@@ -32,7 +32,7 @@ CREATE TABLE tickets (
     ticket_no VARCHAR(32) PRIMARY KEY,
     conversation_id BIGINT NOT NULL,
     description TEXT NOT NULL,
-    ticket_type ENUM('售后', '投诉', '咨询') NOT NULL,
+    ticket_type ENUM('售后', '投诉', '咨询', '退款') NOT NULL,
     status ENUM('待处理', '已处理') NOT NULL DEFAULT '待处理',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_tickets_conversation FOREIGN KEY (conversation_id) REFERENCES conversations (id)
