@@ -64,6 +64,54 @@ async def test_stream_turn_maps_events(monkeypatch):
     assert kinds[-1] == "done" and events[-1]["conversation_id"] == 7
 
 
+@pytest.mark.asyncio
+async def test_stream_turn_emits_interrupt_event(monkeypatch):
+    async def fake_create(uid): return 9
+    async def fake_append(cid, role, content=None, **k): return 1
+    monkeypatch.setattr(runtime.repository, "create_conversation", fake_create)
+    monkeypatch.setattr(runtime.repository, "append_message", fake_append)
+
+    class Intr:
+        def __init__(self, value): self.value = value
+
+    class FakeGraph:
+        async def astream(self, inp, config, stream_mode=None):
+            yield ("updates", {"fetch_order": None})
+            yield ("updates", {"__interrupt__": (Intr({"type": "select_order",
+                     "orders": [{"order_id": "1001"}]}),)})
+    monkeypatch.setattr(runtime, "get_graph", lambda: FakeGraph())
+    events = [e async for e in runtime.stream_turn("u1", "我要退款", None)]
+    intr = [e for e in events if e["type"] == "interrupt"]
+    assert intr and intr[0]["kind"] == "select_order"
+    assert intr[0]["orders"] == [{"order_id": "1001"}]
+
+
+@pytest.mark.asyncio
+async def test_resume_turn_drives_command(monkeypatch):
+    from langgraph.types import Command
+    seen = {}
+
+    class FakeGraph:
+        async def ainvoke(self, inp, config):
+            seen["is_command"] = isinstance(inp, Command)
+            seen["resume"] = getattr(inp, "resume", None)
+            return {"answer": "这一单可以退款", "messages": []}
+    async def fake_get(cid): return object()
+    monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
+    monkeypatch.setattr(runtime, "get_graph", lambda: FakeGraph())
+    out = await runtime.resume_turn(5, "1001")
+    assert seen["is_command"] and seen["resume"] == "1001"
+    assert out["conversation_id"] == 5 and out["state"]["answer"] == "这一单可以退款"
+
+
+def test_dedup_actions_keep_first():
+    a1 = {"type": "create_ticket", "draft": {"title": "查物流"}}
+    a2 = {"type": "create_ticket", "draft": {"title": "查物流"}}
+    a3 = {"type": "create_ticket", "draft": {"title": "申请换货"}}
+    out = runtime.dedup_actions([a1, a2, a3])
+    assert out == [a1, a3]  # 同 type+同 draft 去重留首条;draft 不同保留
+
+
 def test_graph_input_resets_per_turn_output_channels():
     """入口把上一轮输出通道全部清零,防跨轮泄漏(ch05 C1)。"""
     inp = runtime._graph_input("u1", "你好", 42)
