@@ -22,8 +22,17 @@ def test_agent_messages_no_evidence_on_business():
     assert "已检索到的知识证据" not in msgs[0].content
 
 
+def _patch_specs(monkeypatch):
+    """agent_llm/agent_tools 都会现拉全量清单;单测一律打桩——真拉会连 MCP Server
+    (8101/8102 没起时 wait_for+冷却也要好几秒,且测试不该依赖外部进程)。"""
+    async def fake_specs():
+        return []
+    monkeypatch.setattr(nodes.registry, "get_all_specs", fake_specs)
+
+
 @pytest.mark.asyncio
 async def test_agent_llm_accumulates_steps_and_tokens(monkeypatch):
+    _patch_specs(monkeypatch)
     ai = AIMessage("好的", usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15})
 
     class FakeModel:
@@ -41,14 +50,16 @@ async def test_agent_llm_accumulates_steps_and_tokens(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_agent_tools_executes_normal_tool(monkeypatch):
-    from app.tools.infra import ToolRun
+    from app.tools.engine import ToolRun
     from langchain_core.messages import ToolMessage
 
-    async def fake_exec(tc, cid):
-        return ToolRun(tool_call_id=tc["id"], name=tc["name"], ok=True,
+    _patch_specs(monkeypatch)
+
+    async def fake_exec(tc, cid, specs):
+        return ToolRun(tool_call_id=tc["id"], name=tc["name"], ok=True, status="成功",
                        tool_message=ToolMessage(content='{"status":"已发货"}', tool_call_id=tc["id"], name=tc["name"]))
 
-    monkeypatch.setattr(nodes, "execute_tool_call", fake_exec)
+    monkeypatch.setattr(nodes.engine, "execute_tool_call", fake_exec)
     ai = AIMessage("", tool_calls=[{"name": "query_logistics", "args": {"order_id": "1001"}, "id": "t1"}])
     out = await nodes.agent_tools({"messages": [ai], "conversation_id": 5})
     assert out["messages"][0].name == "query_logistics"
@@ -57,10 +68,12 @@ async def test_agent_tools_executes_normal_tool(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_agent_tools_intercepts_create_ticket(monkeypatch):
-    async def fake_exec(tc, cid):
+    _patch_specs(monkeypatch)
+
+    async def fake_exec(tc, cid, specs):
         raise AssertionError("create_ticket 不应被执行(应拦截为提议)")
 
-    monkeypatch.setattr(nodes, "execute_tool_call", fake_exec)
+    monkeypatch.setattr(nodes.engine, "execute_tool_call", fake_exec)
     ai = AIMessage("", tool_calls=[{"name": "create_ticket",
                     "args": {"description": "屏幕碎了", "ticket_type": "售后"}, "id": "t9"}])
     out = await nodes.agent_tools({"messages": [ai], "conversation_id": 5})

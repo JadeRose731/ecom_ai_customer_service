@@ -17,9 +17,7 @@ from app.core.prompts import (
 )
 from app.db import repository
 from app.graph.routing import INTENT_TO_ROUTE
-from app.tools import business
-from app.tools.infra import execute_tool_call
-from app.tools.registry import get_all_tools
+from app.tools import business, engine, registry
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +261,9 @@ async def agent_llm(state, config=None) -> dict:
     """ReAct 推理步:调模型(带工具),累加 steps 与 token 消耗。"""
     msgs = _agent_messages(state)
     _log_model_context(state, msgs)   # ch07:拼装结果进日志,验收可观测
-    model = get_chat_model(streaming=True).bind_tools(get_all_tools())
+    # ch08:全量清单现问现拿(bind),MCP 新工具下一轮即可见
+    specs = await registry.get_all_specs()
+    model = get_chat_model(streaming=True).bind_tools([s.tool for s in specs])
     ai: AIMessage = await model.ainvoke(msgs, config)
     used = (ai.usage_metadata or {}).get("total_tokens", 0) if ai.usage_metadata else 0
     return {"messages": [ai],
@@ -273,8 +273,10 @@ async def agent_llm(state, config=None) -> dict:
 
 async def agent_tools(state) -> dict:
     """ReAct 行动步:执行工具并回灌结果。create_ticket/submit_refund 均拦截为『提议』——不写库,
-    转成前端可选项,并回一条合成 ToolMessage 让模型收敛(真正写库在按钮端点)。"""
+    转成前端可选项,并回一条合成 ToolMessage 让模型收敛(真正写库在按钮端点)。
+    ch08:其余工具一律走统一执行引擎(engine,Task 3)。"""
     last = state["messages"][-1]
+    specs = {s.name: s for s in await registry.get_all_specs()}
     tool_msgs = []
     actions = list(state.get("suggested_actions", []))
     for tc in last.tool_calls:
@@ -293,7 +295,7 @@ async def agent_tools(state) -> dict:
                 content="已把『提交退款工单』选项交给用户确认。请用一句话说明这一单可以退款并停止,不要再调用任何工具。",
                 tool_call_id=tc["id"], name="submit_refund"))
         else:
-            run = await execute_tool_call(tc, state.get("conversation_id", 0))
+            run = await engine.execute_tool_call(tc, state.get("conversation_id", 0), specs)
             tool_msgs.append(run.tool_message)
     out = {"messages": tool_msgs}
     if actions:

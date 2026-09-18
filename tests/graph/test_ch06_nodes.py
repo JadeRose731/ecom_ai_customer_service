@@ -247,7 +247,11 @@ async def test_retrieve_policy_expands_dedups_merges(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_agent_tools_intercepts_submit_refund():
+async def test_agent_tools_intercepts_submit_refund(monkeypatch):
+    # ch08:agent_tools 开头现拉全量清单,单测打桩避免真连 MCP Server
+    async def fake_specs():
+        return []
+    monkeypatch.setattr(nodes.registry, "get_all_specs", fake_specs)
     ai = AIMessage(content="", tool_calls=[
         {"id": "r1", "name": "submit_refund", "args": {"order_id": "1001", "reason": None}}])
     out = await nodes.agent_tools({"messages": [ai]})

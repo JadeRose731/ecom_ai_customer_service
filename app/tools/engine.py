@@ -56,9 +56,20 @@ def _summarize(content: str) -> str:
     return content if len(content) <= _SUMMARY_LIMIT else content[:_SUMMARY_LIMIT] + "…(截断)"
 
 
+def _unwrap_mcp_content(result):
+    """adapters 0.3.2 实装:MCP 工具 ainvoke 返回 content blocks 列表(每块带本次调用
+    唯一的 lc_ id),解出 text 块交回主流程;非该形状原样透传(dev-notes Task 4 裁定)。"""
+    if isinstance(result, list) and result and \
+            all(isinstance(b, dict) and b.get("type") == "text" for b in result):
+        texts = [b.get("text", "") for b in result]
+        return "\n".join(texts) if len(texts) > 1 else texts[0]
+    return result
+
+
 def _format_content(spec: ToolSpec, result) -> str:
-    """结果格式化:MCP 工具常返回 JSON 文本,先解回 dict;format_result 钩子挑字段/枚举翻人话;
-    统一 ensure_ascii=False 序列化(中文不转义)。"""
+    """结果格式化:MCP content blocks 先解包,JSON 文本再解回 dict;format_result 钩子
+    挑字段/枚举翻人话;统一 ensure_ascii=False 序列化(中文不转义)。"""
+    result = _unwrap_mcp_content(result)
     if isinstance(result, str):
         try:
             result = json.loads(result)
