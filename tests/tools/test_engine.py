@@ -120,6 +120,25 @@ async def test_format_result_hook_translates_enum(audits):
     assert audits[-1]["tool_source"] == "mcp"
 
 
+async def test_mcp_content_blocks_unwrapped_before_format(audits):
+    """adapters 0.3.2 实装:MCP 工具返回 content blocks 列表(块带唯一 lc_ id)——
+    引擎先解包成 JSON 文本再走 解析→format_result 主流程,钩子拿到的已是 dict。"""
+    async def ok(_):
+        import json as _json
+        return [{"type": "text", "id": "lc-unique-per-call",
+                 "text": _json.dumps({"tracking_no": "SF1", "status_code": "IN_TRANSIT"},
+                                     ensure_ascii=False)}]
+    def fmt(d):
+        return {"tracking_no": d["tracking_no"], "status": "运输中"}
+    spec = _spec("query_logistics", source="mcp", tool=_tool(ok, "query_logistics"),
+                 schema={"type": "object", "properties": {"tracking_no": {"type": "string"}},
+                         "required": ["tracking_no"]}, fmt=fmt)
+    run = await engine.execute_tool_call({"name": "query_logistics", "args": {"tracking_no": "SF1"}, "id": "c1"},
+                                         1, {"query_logistics": spec})
+    assert run.ok is True and "运输中" in run.tool_message.content
+    assert "lc-unique-per-call" not in run.tool_message.content   # 块级元数据不进回灌
+
+
 async def test_audit_failure_never_blocks_execution(monkeypatch):
     async def audit_boom(*a, **kw):
         raise RuntimeError("审计库挂了")

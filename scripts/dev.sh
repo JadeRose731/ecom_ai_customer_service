@@ -13,4 +13,5 @@ if [ ! -f .env ]; then
 fi
 set -a; source .env; set +a
 
+make mcp-up   # ch08: 物流/售后 MCP Server(独立进程)
 uv run uvicorn app.main:app --port 8000
