@@ -35,5 +35,10 @@ class Settings(BaseSettings):
     intent_small_model: str = ""      # 降级路小模型(种子,未接运行时)
     intent_mode: str = "accuracy"     # accuracy=只用大模型;cost=小模型判→低置信升级大模型(未实现)
     intent_conf_threshold: float = 0.6  # cost 模式升级阈值(种子)
+    # ch07 会话上下文管理(滑窗 + 异步摘要)
+    summary_trigger_messages: int = 30    # 距上次摘要新增满多少条触发后台任务
+    context_window_turns: int = 8         # 摘要后保留原文的最近轮数(需求 5-10 取中)
+    context_window_max_tokens: int = 3000 # 滑窗 token 上限(trim_messages 兜底)
+    summary_model: str = ""               # 摘要模型,空=回落 chat_model
 
 settings = Settings()
