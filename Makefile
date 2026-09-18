@@ -101,3 +101,7 @@ mcp-down:
 	-@kill `cat data/mcp-logistics.pid 2>/dev/null` 2>/dev/null; rm -f data/mcp-logistics.pid
 	-@kill `cat data/mcp-aftersales.pid 2>/dev/null` 2>/dev/null; rm -f data/mcp-aftersales.pid
 	@echo "MCP Servers 已停"
+
+# ch08:验收样例端到端(需 make dev 全服务 + mcp-up)
+eval-ch08:
+	PYTHONPATH=. uv run python scripts/eval_ch08.py
