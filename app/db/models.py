@@ -117,6 +117,9 @@ class LowConfidenceQuestion(Base):
     )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    retrieved_chunks: Mapped[list | None] = mapped_column(JSON, nullable=True)   # ch09 落池时召回快照
+    matched_review_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("review_queue.id"), nullable=True)               # ch09 查重归并落点
 
 class FaithCase(Base):
     """编造个案台账:评估判出的编造答案一题一行,跨轮累计;处置状态人工流转。"""
@@ -159,4 +162,33 @@ class ToolAuditLog(Base):
     error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, server_default="0")
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ReviewQueue(Base):
+    """ch09 飞轮待审队列:一行 = 一个去重后的知识缺口;查重命中累加 occurrence_count 不新建行。"""
+    __tablename__ = "review_queue"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    normalized_question: Mapped[str] = mapped_column(String(512))
+    ai_suggested_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    occurrence_count: Mapped[int] = mapped_column(Integer, server_default="1")
+    review_status: Mapped[str] = mapped_column(Enum("待审", "通过", "驳回"), server_default="待审")
+    approved_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class EvalRun(Base):
+    """ch09 自动化评估流水线:一行 = 一轮评估;metrics JSON 收各指标,按时间连成趋势。"""
+    __tablename__ = "eval_runs"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    triggered_by: Mapped[str] = mapped_column(Enum("定时", "手动"), server_default="定时")
+    dataset_size: Mapped[int] = mapped_column(Integer)
+    metrics: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
