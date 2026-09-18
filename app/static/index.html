@@ -122,6 +122,18 @@
   .order-card .oc-status { font-size: 12px; color: #6b7280; background: #f3f4f6; border-radius: 999px; padding: 1px 8px; }
   .order-card .oc-amount { margin-left: auto; color: var(--brand); font-weight: 600; }
   .order-card .oc-meta { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+  /* ch08 工单预览卡(interrupt 帧):预览字段 + 确认/取消双按钮,风格对齐订单卡一族 */
+  .ticket-confirm { border: 1px solid var(--line); background: #fff; border-radius: 10px;
+                    padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+  .ticket-confirm .tc-title { font-weight: 600; }
+  .ticket-confirm .tc-row { font-size: 13px; }
+  .ticket-confirm .tc-row b { font-weight: 600; }
+  .ticket-confirm .tc-btns { display: flex; gap: 8px; margin-top: 4px; }
+  .ticket-confirm .tc-btns button { border: 1px solid var(--line); background: #fff; border-radius: 8px;
+                                    padding: 6px 14px; cursor: pointer; font: inherit; font-size: 13px; }
+  .ticket-confirm .tc-btns .primary { border: none; background: var(--brand); color: #fff; }
+  .ticket-confirm .tc-btns button:disabled { opacity: .55; cursor: not-allowed; }
+  .ticket-confirm .tc-note { font-size: 12px; color: var(--muted); }
   footer { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; }
   #input { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
            font: inherit; outline: none; height: 44px; }
@@ -565,7 +577,14 @@ async function consumeSSE(resp, shell) {
         conversationId = String(payload.conversation_id);
         localStorage.setItem(CID_KEY, conversationId);
       }
-      if (!shell.interrupted) renderOrderCards(shell, payload.orders || []);
+      if (!shell.interrupted) {
+        // ch08:按中断类型分发——订单选择器(ch06)/ 工单预览卡(ch08)
+        if (payload.kind === 'confirm_ticket') {
+          renderTicketConfirm(shell, payload.preview || {}, payload.conversation_id);
+        } else {
+          renderOrderCards(shell, payload.orders || []);
+        }
+      }
     } else if (payload.event === 'done') {
       conversationId = String(payload.conversation_id);
       localStorage.setItem(CID_KEY, conversationId);
@@ -674,6 +693,64 @@ async function resumeWithOrder(cid, orderId) {
   }
 }
 
+/* ---------- ch08 工单预览卡(interrupt 帧)→ resume 续流 ---------- */
+let ticketPending = false;   // 预览卡待确认,期间拦自由输入(与 orderPending 同款守卫)
+
+function renderTicketConfirm(shell, preview, cid) {
+  shell.interrupted = true;
+  ticketPending = true;
+  if (!shell.firstDelta) shell.bubble.textContent = '请确认是否创建工单:';
+  const card = document.createElement('div');
+  card.className = 'ticket-confirm';
+  card.innerHTML =
+    '<div class="tc-title">📋 工单预览</div>'
+    + '<div class="tc-row"><b>工单类型:</b>' + esc(String(preview.ticket_type ?? '')) + '</div>'
+    + '<div class="tc-row"><b>问题描述:</b>' + esc(String(preview.description ?? '')) + '</div>';
+  const btns = document.createElement('div');
+  btns.className = 'tc-btns';
+  const ok = document.createElement('button');
+  ok.type = 'button'; ok.className = 'primary'; ok.textContent = '确认提交';
+  const no = document.createElement('button');
+  no.type = 'button'; no.textContent = '取消';
+  const decide = (confirmed) => {
+    if (ok.disabled) return;
+    const id = (cid !== undefined && cid !== null) ? Number(cid) : getConversationId();
+    if (!id) return;   // 历史中断残留卡片可能无 cid,无从 resume,静默忽略(同订单卡)
+    ok.disabled = no.disabled = true;   // 点任一按钮后两键同禁,回显选择
+    const note = document.createElement('div');
+    note.className = 'tc-note';
+    note.textContent = confirmed ? '已选择:确认提交' : '已选择:取消,本次不建单';
+    card.appendChild(note);
+    ticketPending = false;
+    resumeTicketConfirm(id, confirmed);
+  };
+  ok.addEventListener('click', () => decide(true));
+  no.addEventListener('click', () => decide(false));
+  btns.appendChild(ok);
+  btns.appendChild(no);
+  card.appendChild(btns);
+  shell.wrap.appendChild(card);
+  scrollBottom();
+}
+
+async function resumeTicketConfirm(cid, confirmed) {
+  sending = true;
+  sendEl.disabled = true;
+  const shell = appendBotShell();
+  try {
+    const resp = await postSSE('/api/actions/resume', { conversation_id: cid, confirmed });
+    await consumeSSE(resp, shell);
+  } catch (err) {
+    shell.bubble.classList.remove('md');
+    shell.bubble.innerHTML = '<span class="error">⚠️ 续流失败,请稍后重试</span>';
+  } finally {
+    sending = false;
+    sendEl.disabled = false;
+    inputEl.focus();
+    loadConversations();
+  }
+}
+
 async function send() {
   const text = inputEl.value.trim();
   if (!text || sending) return;
@@ -681,6 +758,10 @@ async function send() {
     // 终审 I1a:待点选期间拦自由输入——挂起线程收新输入会从节点头重跑上游再暂停,
     // 不 POST,只提示点选;页面刷新后本标记复位、DOM 清空,任意输入照常收到服务端 interrupt 卡片
     addBotText('请先点选上方订单卡片完成退款,或点「新会话」重新开始');
+    return;
+  }
+  if (ticketPending) {
+    addBotText('请先在上方工单预览卡选择「确认提交」或「取消」');
     return;
   }
   sending = true;
@@ -705,6 +786,7 @@ document.getElementById('newChat').addEventListener('click', () => {
   conversationId = null;
   localStorage.removeItem(CID_KEY);
   orderPending = false;   // 终审 I1:新会话重置守卫
+  ticketPending = false;   // ch08:工单预览卡守卫同复位
   chatEl.innerHTML = '';
   inputEl.focus();
   renderConvList();      // ch07:清高亮(无 active 会话)
