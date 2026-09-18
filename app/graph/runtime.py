@@ -130,6 +130,8 @@ async def stream_turn(user_id, message, conversation_id) -> AsyncIterator[dict]:
     msg_id = await repository.append_message(cid, "user", content=message)
     async for ev in _stream_events(cid, _graph_input(user_id, message, cid, msg_id, summary, upto)):
         yield ev
+    # 客户端中途断连时生成器在 yield 处被 GeneratorExit 关闭,走不到这行——
+    # 该轮摘要检查被跳过属可接受:下一轮 any 轮结束都会重新过阈值,自愈。
     await summarizer.maybe_schedule_summary(cid)
 
 
@@ -139,7 +141,7 @@ async def stream_resume(conversation_id: int, resume_value) -> AsyncIterator[dic
         raise ConversationNotFound(conversation_id)
     async for ev in _stream_events(conversation_id, Command(resume=resume_value)):
         yield ev
-    await summarizer.maybe_schedule_summary(conversation_id)
+    await summarizer.maybe_schedule_summary(conversation_id)   # 断连跳过同 stream_turn,自愈
 
 
 async def _stream_events(cid: int, stream_source) -> AsyncIterator[dict]:

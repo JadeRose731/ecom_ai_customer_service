@@ -51,6 +51,11 @@ def build_window(messages: list[BaseMessage], summary_upto_msg_id: int,
                 if did is not None and did > summary_upto_msg_id:
                     start = i
                     break
+        # 混合历史(ch07 前旧消息无锚点):把首个锚点之前的未锚定尾巴回卷进窗,
+        # 否则这段在摘要里没盖住(id>边界)、又被锚点硬切掉,两头落空。
+        # 回卷停在更早的锚点上(锚定轮已进摘要,回窗只是重复,trim 会先裁最旧的)。
+        while start > 0 and _db_msg_id(messages[start - 1]) is None:
+            start -= 1
     window = messages[start:]
     trimmed = trim_history(window, max_tokens=max_tokens)
     return trimmed or window
@@ -60,7 +65,9 @@ def summary_line(summary: str | None) -> str:
     return f"(早前对话摘要:{summary})" if summary else ""
 
 def summary_system(summary: str | None) -> SystemMessage | None:
-    """main_agent 拼装用:摘要 system 消息(紧跟人设 system);无摘要 None。"""
+    """main_agent 拼装用:摘要块(带标题头)。返回 SystemMessage 只是借它当内容容器——
+    实际不作为 system 注入:调用方(_turn_context)取 .content 拼进用户侧「本轮材料」
+    消息(见 nodes._agent_messages 的前缀缓存注释);无摘要返回 None。"""
     if not summary:
         return None
     return SystemMessage(f"## 早前对话摘要(更早轮次已压缩,其中事实可信)\n{summary}")

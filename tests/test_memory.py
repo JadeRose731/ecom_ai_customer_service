@@ -55,6 +55,25 @@ def test_build_window_anchor_missing_degrades_to_trim():
     win = build_window(list(msgs), summary_upto_msg_id=99, max_tokens=100000)
     assert len(win) == 6                     # 找不到锚点 → 不切,整段进 trim
 
+def test_build_window_mixed_history_keeps_unanchored_tail():
+    """ch07 前的旧消息无锚点、紧贴首个锚点之前的尾巴必须留在窗里:
+    这段在摘要里也没盖住(摘要段只收边界之前的 id),锚点一硬切就两头落空。"""
+    legacy = [HumanMessage("旧问题0"), AIMessage("旧回答0"),
+              HumanMessage("旧问题1"), AIMessage("旧回答1")]
+    msgs = legacy + _dialog(3, start_db_id=9)    # 首个锚点 db-9 在 index 4
+    win = build_window(msgs, summary_upto_msg_id=8, max_tokens=100000)
+    assert win[0] == legacy[0]                   # 未锚定尾巴回卷进窗
+    assert win[-1] == msgs[-1]
+
+def test_build_window_mixed_history_stops_at_older_anchor():
+    """回卷不越过更早的锚点:边界前的锚定轮(db-1)已进摘要,不回窗;
+    其未锚定 AI 回复(id≤边界)也已被摘要覆盖,trim 落在首个 human 上裁掉属正确语义。"""
+    msgs = _dialog(1, start_db_id=1) + _dialog(1, start_db_id=3) + _dialog(1, start_db_id=5)
+    # [user db-1, ai, user db-3, ai, user db-5, ai]
+    win = build_window(msgs, summary_upto_msg_id=2, max_tokens=100000)
+    assert win[0].id == "db-3"                   # 窗从首个 > 边界的锚点起(trim 对齐 human)
+    assert not any(m.id == "db-1" for m in win)  # 不越过更早的锚点 db-1
+
 def test_build_window_token_cap_still_applies():
     msgs = _dialog(20)
     for m in msgs:
