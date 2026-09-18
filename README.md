@@ -152,6 +152,22 @@ uv run pytest             # 单测(195 个,图节点/runtime/API 全 Fake 不打
 - **验收入口**:聊天页不带订单号问「我要退款」→ 聊天流弹订单选择器卡片 → 点一张续跑(检索政策 → Agent 判能否退)→ 能退出「提交退款工单」按钮 → 表单提交显示退款单号(前端 interrupt→resume→退款表单全链路);多轮「订单1001到哪了 → 那我想把它退了 → 算了它现在到哪了」意图随上下文漂移,应用日志 grep `ch05 turn` 看 `route=refund_flow` 与 trace `coref` 改写明细——真实验收待 key,命令就位(`make eval-ch06` + 三个 prompt eval)。
 - **接口红线已钉死**(scripts/smoke_interrupt.py):中断时 `ainvoke` 正常返回带 `__interrupt__` 键、`Command(resume=…)` 从被中断节点头重跑、流式中断以 updates chunk 浮出;langgraph 升级后先重跑此冒烟。
 
+## ch07:会话上下文管理(滑窗 + 异步摘要)
+
+「全量历史直递模型」升级为双层上下文:滑动窗口保最近轮次原文(默认 8 轮 / 3000 token)+ 早期轮次后台异步压成滚动摘要。入口给用户消息打 `db-{msg_id}` 锚点入 State(State/checkpointer 全量历史一条不删,精简版每次调模型前现拼,双轨互不影响);消费点(coref/意图的历史文本、主力 Agent 的消息列表)按摘要边界锚点切窗 + `trim_messages` token 兜底(锚点缺失退化纯 token 裁剪,裁到空宁超预算不回空窗);摘要以「本轮材料」跟在最后一条用户消息后——**不进 system**(上游 chat template 会把多条 system 上提合并,前缀缓存全 miss);摘要任务在轮结束后 `asyncio.create_task` 图外后台跑(距上次摘要满 30 条新增触发、在跑防抖、失败只 log 下轮重触发、summary 两字段原子更新)。验收两件套:`model_ctx` 日志(摘要全文 + 滑窗逐条)+ 前端会话侧栏(列表 / 切换 / 历史回载,<780px 隐藏)。
+
+```bash
+docker compose up -d      # MySQL + Milvus 三容器
+docker exec -i mewhelp-mysql mysql --default-character-set=utf8mb4 -uroot -proot mewhelp < sql/ch07-ddl.sql
+                          # conversations 加 summary / summary_upto_msg_id 两列(本章环境已应用,SHOW COLUMNS 已验证)
+uv run pytest             # 单测(224 个;切窗/拼装/摘要任务全纯函数或 monkeypatch)
+make eval-ch07            # 摘要 prompt 标注样例验证(需真实上游)—— 待key
+uv run uvicorn app.main:app --port 8000
+```
+
+- **验收入口**:同一会话灌 25 轮(前几轮报订单号/手机号,后面灌闲聊+咨询),第 26 问「最开始那个订单后来怎么说」答复应含早期订单号;应用日志 `grep summary` 应有 `trigger/start/done` 痕迹、`grep model_ctx` 可见摘要全文 + 滑窗逐条;`SELECT summary, summary_upto_msg_id FROM conversations WHERE id=?` 已更新;当轮响应耗时应无摘要尖峰(摘要后台跑);左侧栏切换多会话回载历史——真实冒烟待 key。
+- **拼装红线已钉死**(tests/test_context_assembly.py):system 恒为静态人设 AGENT_SYSTEM(谁往 system 塞可变内容立刻红)、ReAct 第 1 步 prompt 是第 2 步的严格前缀(轮内缓存命中)、滑窗从摘要边界后第一条用户消息接原文、无摘要不插第二条 system。
+
 ## 技术栈
 
 - **后端**:Python 3.12、FastAPI、LangChain / LangGraph、SQLAlchemy 2.0(异步)、uv
