@@ -308,3 +308,35 @@ async def faith_case_status_map() -> dict[str, str]:
     async with db.async_session() as s:
         rows = (await s.execute(select(FaithCase.eval_id, FaithCase.status))).all()
         return {eid: st for eid, st in rows}
+
+
+# ---- ch07 会话上下文:摘要读写/计数 ----
+
+async def count_messages_after(conversation_id: int, after_id: int | None) -> int:
+    """距上次摘要新增了多少条(after_id 空 = 从未摘要,数全量)。摘要触发判据。"""
+    async with db.async_session() as s:
+        q = (select(func.count()).select_from(Message)
+             .where(Message.conversation_id == conversation_id))
+        if after_id:
+            q = q.where(Message.id > after_id)
+        return int((await s.execute(q)).scalar_one())
+
+async def list_dialog_messages(conversation_id: int) -> list[Message]:
+    """user/assistant 消息按 id 升序(摘要任务源数据;tool 行不落库,过滤一道保险)。"""
+    async with db.async_session() as s:
+        result = await s.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id,
+                   Message.role.in_(("user", "assistant")))
+            .order_by(Message.id)
+        )
+        return list(result.scalars())
+
+async def update_conversation_summary(conversation_id: int, summary: str, upto_msg_id: int) -> None:
+    """摘要成功后原子更新两字段(一起写,不会出现摘要新边界旧)。"""
+    async with db.async_session() as s:
+        conv = await s.get(Conversation, conversation_id)
+        if conv is not None:
+            conv.summary = summary
+            conv.summary_upto_msg_id = upto_msg_id
+            await s.commit()

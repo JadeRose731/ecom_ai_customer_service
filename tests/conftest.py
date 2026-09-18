@@ -12,6 +12,7 @@ _DDL_FILES = [
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch02-ddl.sql",
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch03-ddl.sql",
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch04-ddl.sql",
+    pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch07-ddl.sql",
 ]
 # 删除顺序:先子表后父表;knowledge_chunks 自引用 FK 靠 FOREIGN_KEY_CHECKS=0 兜
 _TABLES = ["low_confidence_questions", "faith_cases", "messages", "tickets", "conversations", "faq",
@@ -23,7 +24,8 @@ def _create_table_stmts() -> list[str]:
     for ddl in _DDL_FILES:
         raw = ddl.read_text(encoding="utf-8")
         sql = "\n".join(ln for ln in raw.splitlines() if not ln.lstrip().startswith("--"))
-        stmts += [s.strip() for s in sql.split(";") if s.strip() and "CREATE TABLE" in s.upper()]
+        stmts += [s.strip() for s in sql.split(";")
+                  if s.strip() and ("CREATE TABLE" in s.upper() or "ALTER TABLE" in s.upper())]
     return stmts
 
 @pytest_asyncio.fixture(scope="session")

@@ -33,3 +33,30 @@ async def test_create_ticket_writes_and_flips_conversation_status(db_session_fac
         assert t.ticket_type == "售后" and t.status == "待处理"
         conv = await s.get(Conversation, cid)
         assert conv.status == "已转人工"          # 会话状态流转
+
+
+# ---- ch07 会话上下文:摘要两列 + 计数/对话消息 ----
+
+async def test_conversation_summary_roundtrip(db_session_factory, db_clean):
+    cid = await repo.create_conversation("u1")
+    conv = await repo.get_conversation(cid)
+    assert conv.summary is None and conv.summary_upto_msg_id is None   # 新会话两字段为空
+    await repo.update_conversation_summary(cid, "用户问过订单1001的物流", 5)
+    conv = await repo.get_conversation(cid)
+    assert conv.summary == "用户问过订单1001的物流"
+    assert conv.summary_upto_msg_id == 5
+
+async def test_count_messages_after(db_session_factory, db_clean):
+    cid = await repo.create_conversation("u1")
+    ids = [await repo.append_message(cid, "user", content=f"q{i}") for i in range(4)]
+    assert await repo.count_messages_after(cid, None) == 4      # 边界空=数全量
+    assert await repo.count_messages_after(cid, ids[1]) == 2
+    assert await repo.count_messages_after(cid, ids[3]) == 0
+
+async def test_list_dialog_messages_filters_tool_rows(db_session_factory, db_clean):
+    cid = await repo.create_conversation("u1")
+    await repo.append_message(cid, "user", content="订单1001到哪了")
+    await repo.append_message(cid, "tool", content='{"s":1}', tool_call_id="c1")
+    await repo.append_message(cid, "assistant", content="在路上")
+    msgs = await repo.list_dialog_messages(cid)
+    assert [m.role for m in msgs] == ["user", "assistant"]      # tool 行过滤,id 升序

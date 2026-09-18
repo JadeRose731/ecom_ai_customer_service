@@ -21,6 +21,9 @@ class Conversation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+    # ch07 滚动摘要:早期轮次压缩文本 + 覆盖边界(滑窗从其后接原文)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_upto_msg_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 class Message(Base):
     __tablename__ = "messages"
