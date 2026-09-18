@@ -1,5 +1,7 @@
 # scripts/eval_agent.py
-"""标注样例评估:核对模型是否按预期选中工具。需服务运行中。"""
+"""标注样例评估:核对模型是否按预期选中工具。需服务运行中。
+ch08 起本脚本已失效:内置 query_logistics 下线改由 MCP Server 提供,
+工具名/样例集合不再匹配;留作 ch02 时代参考,勿直接重跑。"""
 import asyncio
 
 import httpx

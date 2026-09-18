@@ -96,6 +96,32 @@ async def test_stream_turn_emits_interrupt_event(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_turn_emits_confirm_ticket_interrupt_preview(monkeypatch):
+    """ch08:confirm_ticket 中断按 kind 透传 preview 字段(前端预览卡靠它渲染;
+    ch08 评审 Minor#6——orders 有 API 级断言,preview 此前只有 graph 级)。"""
+    async def fake_create(uid): return 9
+    async def fake_append(cid, role, content=None, **k): return 1
+    async def fake_get(cid): return None
+    monkeypatch.setattr(runtime.repository, "create_conversation", fake_create)
+    monkeypatch.setattr(runtime.repository, "append_message", fake_append)
+    monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
+
+    class Intr:
+        def __init__(self, value): self.value = value
+
+    class FakeGraph:
+        async def astream(self, inp, config, stream_mode=None):
+            yield ("updates", {"__interrupt__": (Intr({"type": "confirm_ticket",
+                     "preview": {"ticket_type": "售后", "description": "猫砂盆漏电"}}),)})
+    monkeypatch.setattr(runtime, "get_graph", lambda: FakeGraph())
+    events = [e async for e in runtime.stream_turn("u1", "帮我建个工单,猫砂盆漏电", None)]
+    intr = [e for e in events if e["type"] == "interrupt"]
+    assert intr and intr[0]["kind"] == "confirm_ticket"
+    assert intr[0]["preview"] == {"ticket_type": "售后", "description": "猫砂盆漏电"}
+    assert intr[0]["conversation_id"] == 9
+
+
+@pytest.mark.asyncio
 async def test_resume_turn_drives_command(monkeypatch):
     from types import SimpleNamespace
 

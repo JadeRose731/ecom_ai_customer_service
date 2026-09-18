@@ -99,3 +99,23 @@ async def test_missing_description_asks_instead_of_interrupt(wired, monkeypatch)
     assert "__interrupt__" not in st                            # 没弹卡
     created, audits = wired
     assert created == [] and any(a["status"] == "校验拦下" for a in audits)
+
+
+async def test_empty_description_blocked_not_confirmed(wired, monkeypatch):
+    """description="" 空串过不了 min_length=1 → 校验拦下回灌,不弹空预览卡(ch08 评审 Important#1:
+    空描述预览卡对用户无意义,机械闸必须逼模型追问,不靠 prompt 自觉)。"""
+    class EmptyDescModel(FakeModel):
+        async def ainvoke(self, msgs, config=None):
+            self.calls += 1
+            if self.calls == 1:
+                return AIMessage(content="", tool_calls=[{
+                    "name": "create_ticket", "id": "tc-1",
+                    "args": {"description": "", "ticket_type": "咨询"}}])
+            return AIMessage(content="请问您遇到的具体问题是什么呢?")
+    monkeypatch.setattr(nodes, "get_chat_model", lambda **kw: EmptyDescModel())
+    g = build_graph(checkpointer=InMemorySaver())
+    cfg = {"configurable": {"thread_id": "t4"}}
+    st = await g.ainvoke(_input("帮我建个工单"), cfg)
+    assert "__interrupt__" not in st                            # 没弹卡
+    created, audits = wired
+    assert created == [] and any(a["status"] == "校验拦下" for a in audits)

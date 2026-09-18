@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 data/*.db*
 data/*.sqlite*
+data/mcp-*.pid
 data/volumes/
 log/
 data/ch04/reports/

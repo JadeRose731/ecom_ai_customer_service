@@ -3,6 +3,7 @@ import asyncio
 from typing import Annotated, Literal
 
 from langchain_core.tools import InjectedToolArg, tool
+from pydantic import Field
 
 from app.config import settings
 from app.db import repository
@@ -11,7 +12,7 @@ from app.tools import registry
 
 @tool
 async def create_ticket(
-    description: str,
+    description: Annotated[str, Field(min_length=1)],   # 空串过不了校验 → 引擎「校验拦下」逼模型追问,不弹空预览卡
     ticket_type: Literal["售后", "投诉", "咨询"],
     conversation_id: Annotated[int, InjectedToolArg],
 ) -> dict:

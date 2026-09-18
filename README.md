@@ -168,6 +168,23 @@ uv run uvicorn app.main:app --port 8000
 - **验收入口**:同一会话灌 25 轮(前几轮报订单号/手机号,后面灌闲聊+咨询),第 26 问「最开始那个订单后来怎么说」答复应含早期订单号;应用日志 `grep summary` 应有 `trigger/start/done` 痕迹、`grep model_ctx` 可见摘要全文 + 滑窗逐条;`SELECT summary, summary_upto_msg_id FROM conversations WHERE id=?` 已更新;当轮响应耗时应无摘要尖峰(摘要后台跑);左侧栏切换多会话回载历史——真实冒烟待 key。
 - **拼装红线已钉死**(tests/test_context_assembly.py):system 恒为静态人设 AGENT_SYSTEM(谁往 system 塞可变内容立刻红)、ReAct 第 1 步 prompt 是第 2 步的严格前缀(轮内缓存命中)、滑窗从摘要边界后第一条用户消息接原文、无摘要不插第二条 system。
 
+## ch08:即插即用工具系统(ToolSpec 注册中心 + 统一执行引擎 + MCP)
+
+工具层全面重构:内置工具迁入 `builtin/` 包**注册即定义**(模块 import 即登记,lifespan `scan_builtin` 幂等扫描;新工具=丢文件重启,核心零改动);`ToolSpec`(名称/描述/JSON Schema/权限/来源/超时/格式化钩子)统一登记内置与 MCP 工具,`get_all_specs()` 合并清单重名内置优先。**统一执行引擎**六段管道:查工具 → JSON Schema 校验(Draft 2020-12,拦下回灌让模型自行修正)→ 权限门(写操作必须带 interrupt 确认令牌,模型绕不过)→ 执行(超时 + 暂时性故障退避重试,**写操作恒不重试**)→ 分诊(超时/网络错如实说「暂时不可用」,禁止编结果)→ 格式化(`ensure_ascii=False` + 枚举翻人话钩子)+ **审计落库**(tool_audit_logs:参数摘要/状态/重试数/耗时;审计失败不反拦执行)。**MCP 接入**:两台自建业务 Server(物流/售后,FastMCP Streamable HTTP 独立进程 8101/8102),client 现问现拿(每轮现拉清单,Server 侧加工具 ≤1 轮可见、重启即见)、单台不可达降级跳过(判死 30s 冷却)、格式化我们侧治理(内部枚举码翻译、内部字段剔除)。**建工单 interrupt 确认流**:create_ticket(唯一写操作)参数齐则 interrupt 推工单预览卡,前端确认提交/取消(resume `{confirmed}`,取消落「权限拒绝」审计);缺参走校验回灌让模型追问。
+
+```bash
+docker compose up -d      # MySQL + Milvus 三容器
+docker exec -i mewhelp-mysql mysql --default-character-set=utf8mb4 -uroot -proot mewhelp < sql/ch08-ddl.sql
+                          # tool_audit_logs 审计表(本章环境已应用)
+make mcp-up && make mcp-down   # 两台业务 MCP Server 起停(:8101/:8102,pid 在 data/*.pid)
+uv run pytest             # 单测(249 个;MCP 集成测子进程真起 Server)
+make eval-ch08            # 五样例端到端:缺描述追问/弹预览卡/确认落库/取消审计/MCP 物流实调(需全服务+真实 key)—— 待key
+uv run uvicorn app.main:app --port 8000
+```
+
+- **验收入口**:聊天问「订单 1001 的物流到哪了」→ Agent 经 MCP query_logistics 应答(中文状态,审计表见 mcp/成功行);「帮我建个工单」→ 追问 → 补「猫砂盆漏电」→ 工单预览卡 → 确认提交 → tickets 落新单且回复带工单号(取消则无新单 + 审计「权限拒绝」);问「最近有什么优惠活动」前 `cp scripts/demo_ch08_promotions.py.txt app/tools/builtin/promotions.py` 重启即用(演示完删);验收 3 热插拔/验收 6 超时重试的机制层已无 key 实证(dev-notes),对话层验收待 key(`make eval-ch08`)。
+- **引擎红线已钉死**(tests/tools/test_engine.py):校验不过不执行、写无确认必拒绝且永不重试、审计炸了不拦执行、MCP content blocks 解包后才进格式化;MCP 现问现拿红线在 tests/tools/test_mcp_client.py(Server 全挂降级跳过、重名内置优先、格式化钩子挂对)。
+
 ## 技术栈
 
 - **后端**:Python 3.12、FastAPI、LangChain / LangGraph、SQLAlchemy 2.0(异步)、uv
