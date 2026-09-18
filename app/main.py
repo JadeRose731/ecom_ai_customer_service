@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.actions import router as actions_router
 from app.api.agent import router as agent_router
 from app.api.chat import router as chat_router
+from app.api.conversations import router as conversations_router
 from app.api.extract import router as extract_router
 from app.api.jobs import router as jobs_router
 from app.api.kb import router as kb_router
@@ -32,6 +33,7 @@ app.include_router(chat_router)
 app.include_router(extract_router)
 app.include_router(agent_router)
 app.include_router(actions_router)
+app.include_router(conversations_router)
 app.include_router(kb_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)

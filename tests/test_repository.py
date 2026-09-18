@@ -60,3 +60,20 @@ async def test_list_dialog_messages_filters_tool_rows(db_session_factory, db_cle
     await repo.append_message(cid, "assistant", content="在路上")
     msgs = await repo.list_dialog_messages(cid)
     assert [m.role for m in msgs] == ["user", "assistant"]      # tool 行过滤,id 升序
+
+async def test_list_conversations_newest_first_with_preview(db_session_factory, db_clean):
+    cid1 = await repo.create_conversation("uA")
+    await repo.append_message(cid1, "user", content="第一会话首问")
+    cid2 = await repo.create_conversation("uA")
+    await repo.append_message(cid2, "user", content="第二会话首问 订单1002")
+    await repo.update_conversation_summary(cid2, "用户问过订单1002", 2)
+    await repo.create_conversation("uB")                        # 别人的会话不可见
+    empty_cid = await repo.create_conversation("uA")            # 空会话:preview 空、无摘要
+
+    items = await repo.list_conversations("uA")
+    assert [i["id"] for i in items] == [empty_cid, cid2, cid1]  # 新在前,不见别人会话
+    assert items[0]["preview"] == "" and items[0]["has_summary"] is False
+    assert items[1]["preview"].startswith("第二会话首问")
+    assert items[1]["has_summary"] is True                      # 摘要标记
+    assert items[2]["preview"] == "第一会话首问"
+    assert all(i["status"] == "进行中" for i in items)

@@ -11,8 +11,25 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--ink); font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
-  .app { max-width: 760px; margin: 24px auto; height: calc(100vh - 48px); display: flex; flex-direction: column;
+  .app { max-width: 1024px; margin: 24px auto; height: calc(100vh - 48px); display: flex; flex-direction: row;
          background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 6px 30px rgba(31,36,48,.06); }
+  /* ch07 会话侧栏:列表 / 切换 / 历史回载(<780px 隐藏,窄屏退回纯聊天) */
+  #sidebar { flex: 0 0 224px; width: 224px; border-right: 1px solid var(--line); background: #fafbfd;
+             overflow-y: auto; padding: 12px 10px; }
+  .sb-title { font-size: 12px; color: var(--muted); margin: 0 4px 8px; }
+  #conv-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .conv-item { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 10px;
+               cursor: pointer; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+  .conv-item:hover { border-color: var(--brand); background: var(--brand-soft); }
+  .conv-item.active { border-color: var(--brand); background: var(--brand-soft); }
+  .cv-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cv-meta { display: flex; align-items: center; gap: 6px; min-height: 16px; }
+  .cv-status { font-size: 11px; color: var(--muted); }
+  .cv-badge { font-size: 11px; color: var(--brand); background: var(--brand-soft); border: 1px solid var(--brand);
+              border-radius: 999px; padding: 0 8px; }
+  .sb-empty { color: var(--muted); font-size: 12px; padding: 4px; }
+  @media (max-width: 780px) { #sidebar { display: none; } }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
   header .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 18px; }
   header h1 { font-size: 16px; font-weight: 600; }
@@ -115,6 +132,11 @@
 </head>
 <body>
 <div class="app">
+  <aside id="sidebar">
+    <div class="sb-title">历史会话(点击切换)</div>
+    <ul id="conv-list"></ul>
+  </aside>
+  <div class="main">
   <header>
     <div class="logo">🐱</div>
     <div>
@@ -170,6 +192,7 @@
     <textarea id="input" placeholder="输入消息,Enter 发送,Shift+Enter 换行"></textarea>
     <button id="send">发送</button>
   </footer>
+  </div>
 </div>
 
 <script>
@@ -647,6 +670,7 @@ async function resumeWithOrder(cid, orderId) {
     sending = false;
     sendEl.disabled = false;
     inputEl.focus();
+    loadConversations();   // ch07:resume 也是一轮,同样刷新侧栏
   }
 }
 
@@ -663,10 +687,14 @@ async function send() {
   sendEl.disabled = true;
   inputEl.value = '';
   appendUser(text);
-  await streamChat(text);
-  sending = false;
-  sendEl.disabled = false;
-  inputEl.focus();
+  try {
+    await streamChat(text);
+  } finally {
+    sending = false;
+    sendEl.disabled = false;
+    inputEl.focus();
+    loadConversations();   // ch07:轮次落库后刷新侧栏(预览/徽标/顺序)
+  }
 }
 
 sendEl.addEventListener('click', send);
@@ -679,8 +707,70 @@ document.getElementById('newChat').addEventListener('click', () => {
   orderPending = false;   // 终审 I1:新会话重置守卫
   chatEl.innerHTML = '';
   inputEl.focus();
+  renderConvList();      // ch07:清高亮(无 active 会话)
 });
+
+/* ---------- ch07 会话侧栏(列表 / 切换 / 历史回载;任何失败静默降级不影响聊天) ---------- */
+let convItems = [];   // 最近一次列表缓存,切换会话后据此重绘高亮
+
+async function loadConversations() {
+  try {
+    const resp = await fetch('/api/conversations?user_id=' + encodeURIComponent(userId));
+    if (!resp.ok) return;
+    const data = await resp.json();
+    convItems = data.items || [];
+    renderConvList();
+  } catch (e) { /* 静默降级:侧栏失败不影响聊天 */ }
+}
+
+function renderConvList() {
+  const list = document.getElementById('conv-list');
+  list.innerHTML = '';
+  if (!convItems.length) {
+    const li = document.createElement('li');
+    li.className = 'sb-empty';
+    li.textContent = '还没有会话';
+    list.appendChild(li);
+    return;
+  }
+  for (const c of convItems) {
+    const li = document.createElement('li');
+    li.className = 'conv-item' + (conversationId && Number(conversationId) === Number(c.id) ? ' active' : '');
+    li.innerHTML = '<span class="cv-preview">' + esc(c.preview || '(空会话)') + '</span>'
+      + '<span class="cv-meta"><span class="cv-status">' + esc(String(c.status || '')) + '</span>'
+      + (c.has_summary ? '<span class="cv-badge">已摘要</span>' : '') + '</span>';
+    li.addEventListener('click', () => switchConversation(Number(c.id)));
+    list.appendChild(li);
+  }
+}
+
+async function switchConversation(cid) {
+  if (sending || orderPending) return;   // 流式中 / 待点选订单时不切换,防错乱
+  if (conversationId && Number(conversationId) === cid) return;   // 已在当前会话
+  try {
+    const resp = await fetch('/api/conversations/' + cid + '/messages');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    conversationId = String(cid);
+    localStorage.setItem(CID_KEY, conversationId);
+    orderPending = false;
+    chatEl.innerHTML = '';
+    for (const m of (data.items || [])) {
+      if (m.role === 'user') {
+        appendUser(m.content);            // 用户消息纯文本
+      } else if (m.role === 'assistant') {
+        const shell = appendBotShell();
+        shell.raw = m.content || '';
+        if (shell.raw) renderMarkdown(shell.bubble, shell.raw);   // bot 走同一 markdown 渲染
+      }
+    }
+    renderConvList();                     // 高亮刷到新选中的会话
+    scrollBottom();
+  } catch (e) { /* 静默降级 */ }
+}
+
 inputEl.focus();
+loadConversations();
 </script>
 </body>
 </html>

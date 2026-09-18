@@ -1,7 +1,9 @@
+import logging
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.core.prompts import AGENT_SYSTEM
-from app.graph.nodes import _agent_messages, _history_text
+from app.graph.nodes import _agent_messages, _history_text, _log_model_context
 
 def _state(n_turns=3, summary="", upto=0):
     msgs = []
@@ -59,3 +61,12 @@ def test_history_text_prepends_summary_and_windows():
 def test_history_text_no_summary_same_as_before():
     text = _history_text(_state(n_turns=2))
     assert "摘要" not in text and "问题0" in text
+
+def test_log_model_context_shows_summary_and_window(caplog):
+    state = _state(n_turns=6, summary="用户问过订单1001,留了手机13800138000", upto=6)
+    msgs = _agent_messages(state)
+    with caplog.at_level(logging.INFO, logger="app.graph.nodes"):
+        _log_model_context(state, msgs)
+    assert "model_ctx" in caplog.text and "订单1001" in caplog.text
+    assert "[human] '问题3" in caplog.text     # 滑窗逐条可见
+    assert "问题0" not in caplog.text          # 边界前原文不进上下文也不进日志

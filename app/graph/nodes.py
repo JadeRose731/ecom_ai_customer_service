@@ -3,6 +3,7 @@ import logging
 import re
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.types import interrupt
 
 from app.config import settings
@@ -245,10 +246,25 @@ def _agent_messages(state) -> list:
     return [SystemMessage(AGENT_SYSTEM), *window]
 
 
+def _log_model_context(state, msgs) -> None:
+    """验收可观测:main_agent 调模型前打 model_ctx 日志——摘要全文 + 滑窗每条(角色+前40字)
+    + 窗口条数 + token 估算。两件套之一(另一件是前端会话侧栏),拼装结果据此肉眼可查。"""
+    summary = state.get("summary") or ""
+    head = (f"model_ctx conv={state.get('conversation_id')} msgs={len(msgs)} "
+            f"~{count_tokens_approximately(msgs)}tok summary={summary!r}")
+    lines = [head]
+    for m in msgs:
+        text = m.content if isinstance(m.content, str) else ""
+        lines.append(f"  [{m.type}] '{text[:40]}'")
+    logger.info("\n".join(lines))
+
+
 async def agent_llm(state, config=None) -> dict:
     """ReAct 推理步:调模型(带工具),累加 steps 与 token 消耗。"""
+    msgs = _agent_messages(state)
+    _log_model_context(state, msgs)   # ch07:拼装结果进日志,验收可观测
     model = get_chat_model(streaming=True).bind_tools(get_all_tools())
-    ai: AIMessage = await model.ainvoke(_agent_messages(state), config)
+    ai: AIMessage = await model.ainvoke(msgs, config)
     used = (ai.usage_metadata or {}).get("total_tokens", 0) if ai.usage_metadata else 0
     return {"messages": [ai],
             "steps": state.get("steps", 0) + 1,

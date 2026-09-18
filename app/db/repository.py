@@ -340,3 +340,26 @@ async def update_conversation_summary(conversation_id: int, summary: str, upto_m
             conv.summary = summary
             conv.summary_upto_msg_id = upto_msg_id
             await s.commit()
+
+async def list_conversations(user_id: str, limit: int = 50) -> list[dict]:
+    """某用户的会话列表(新在前,带首问预览 + 有无摘要标记),前端多会话切换用。"""
+    async with db.async_session() as s:
+        rows = (await s.execute(
+            select(Conversation)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.id.desc())
+            .limit(limit))).scalars().all()
+        out = []
+        for c in rows:
+            first = (await s.execute(
+                select(Message.content)
+                .where(Message.conversation_id == c.id, Message.role == "user")
+                .order_by(Message.id)
+                .limit(1))).scalar_one_or_none()
+            out.append({
+                "id": c.id, "status": c.status,
+                "preview": (first or "")[:40],
+                "has_summary": bool(c.summary),
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            })
+        return out
