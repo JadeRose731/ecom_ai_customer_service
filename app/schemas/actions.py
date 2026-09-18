@@ -29,4 +29,5 @@ class CreateRefundResponse(BaseModel):
 
 class ResumeRequest(BaseModel):
     conversation_id: int
-    order_id: str = Field(min_length=1, max_length=32, pattern=r"^\d{4,}$")
+    order_id: str | None = Field(default=None, min_length=1, max_length=32, pattern=r"^\d{4,}$")   # ch06 订单选择器
+    confirmed: bool | None = None                              # ch08 工单预览确认/取消

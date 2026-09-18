@@ -48,10 +48,14 @@ def _sse(payload: dict) -> str:
 
 @router.post("/api/actions/resume")
 async def resume_action(req: ResumeRequest):
-    """订单选择器点选后续跑暂停的退款子流程(SSE,事件与 /api/chat 同构)。"""
+    """续跑暂停的子流程(ch06 订单选择器 / ch08 工单预览确认,SSE,事件与 /api/chat 同构)。"""
+    if req.order_id is None and req.confirmed is None:
+        raise HTTPException(status_code=400, detail="order_id 与 confirmed 至少传一个")
+    resume_value = req.order_id if req.order_id is not None else {"confirmed": bool(req.confirmed)}
+
     async def event_stream() -> AsyncIterator[str]:
         try:
-            async for ev in runtime.stream_resume(req.conversation_id, req.order_id):
+            async for ev in runtime.stream_resume(req.conversation_id, resume_value):
                 if ev["type"] == "tool":
                     yield _sse({"event": "tool", "name": ev["name"]})
                 elif ev["type"] == "delta":
@@ -62,8 +66,8 @@ async def resume_action(req: ResumeRequest):
                     yield _sse({"event": "actions", "items": ev["items"]})
                 elif ev["type"] == "interrupt":
                     # R15:契约与 /api/chat 同构(resume 场景前端已有 cid,此字段为冗余无害)
-                    yield _sse({"event": "interrupt", "kind": ev["kind"], "orders": ev["orders"],
-                                "conversation_id": ev["conversation_id"]})
+                    yield _sse({"event": "interrupt",
+                                **{k: v for k, v in ev.items() if k != "type"}})
                 elif ev["type"] == "done":
                     yield _sse({"event": "done", "conversation_id": ev["conversation_id"]})
         except runtime.ConversationNotFound:

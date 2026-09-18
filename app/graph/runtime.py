@@ -94,12 +94,14 @@ def _graph_input(user_id: str, message: str, cid: int, msg_id: int,
             "trace": None}
 
 
-def _interrupt_orders(state: dict):
-    """ainvoke 终态里的待处理中断 → 订单选择器载荷(无中断返回 None)。"""
+def _interrupt_payload(state: dict):
+    """ainvoke 终态里的待处理中断 → 完整中断载荷(无中断返回 None)。ch06 订单选择器
+    ({"type":"select_order","orders":[…]})与 ch08 工单预览({"type":"confirm_ticket",
+    "preview":{…}})共用此出口,前端按 type 分派。"""
     intr = state.get("__interrupt__")
     if not intr:
         return None
-    return intr[0].value.get("orders")
+    return intr[0].value
 
 
 async def run_turn(user_id, message, conversation_id) -> dict:
@@ -110,7 +112,7 @@ async def run_turn(user_id, message, conversation_id) -> dict:
     final = await get_graph().ainvoke(
         _graph_input(user_id, message, cid, msg_id, summary, upto), config)
     await summarizer.maybe_schedule_summary(cid)     # 轮后触发检查(后台,不阻塞返回)
-    return {"conversation_id": cid, "state": final, "interrupt": _interrupt_orders(final)}
+    return {"conversation_id": cid, "state": final, "interrupt": _interrupt_payload(final)}
 
 
 async def resume_turn(conversation_id: int, resume_value) -> dict:
@@ -121,7 +123,7 @@ async def resume_turn(conversation_id: int, resume_value) -> dict:
     final = await get_graph().ainvoke(Command(resume=resume_value), config)
     await summarizer.maybe_schedule_summary(conversation_id)
     return {"conversation_id": conversation_id, "state": final,
-            "interrupt": _interrupt_orders(final)}
+            "interrupt": _interrupt_payload(final)}
 
 
 async def stream_turn(user_id, message, conversation_id) -> AsyncIterator[dict]:
@@ -161,8 +163,11 @@ async def _stream_events(cid: int, stream_source) -> AsyncIterator[dict]:
                 payload = chunk["__interrupt__"][0].value
                 # R15:中断流无 done 帧,conversation_id 必须随 interrupt 帧下发,
                 # 否则全新会话首问即中断时前端拿不到 cid、无从 resume
-                yield {"type": "interrupt", "kind": payload.get("type", ""),
-                       "orders": payload.get("orders", []), "conversation_id": cid}
+                ev = {"type": "interrupt", "kind": payload.get("type", ""), "conversation_id": cid}
+                for k in ("orders", "preview"):                 # 按中断类型透传负载
+                    if payload.get(k) is not None:
+                        ev[k] = payload[k]
+                yield ev
                 return  # 图已暂停,结束本次流(前端点选后走 resume 续流)
             for node, upd in chunk.items():
                 if not isinstance(upd, dict):

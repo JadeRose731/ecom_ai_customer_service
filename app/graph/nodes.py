@@ -272,30 +272,47 @@ async def agent_llm(state, config=None) -> dict:
 
 
 async def agent_tools(state) -> dict:
-    """ReAct 行动步:执行工具并回灌结果。create_ticket/submit_refund 均拦截为『提议』——不写库,
-    转成前端可选项,并回一条合成 ToolMessage 让模型收敛(真正写库在按钮端点)。
-    ch08:其余工具一律走统一执行引擎(engine,Task 3)。"""
+    """ReAct 行动步(ch08):一切工具经统一执行引擎。create_ticket(唯一写操作)走确认流——
+    参数齐则节点顶部 interrupt 推工单预览(interrupt 前只做纯计算,resume 重跑安全,照 fetch_order 范式);
+    参数缺则交引擎按「校验拦下」回灌,模型自然向用户追问。submit_refund 仍拦成前端退款表单(ch06)。"""
     last = state["messages"][-1]
+    cid = state.get("conversation_id", 0)
     specs = {s.name: s for s in await registry.get_all_specs()}
+
+    ticket_calls = [tc for tc in last.tool_calls if tc["name"] == "create_ticket"]
+    decision = None
+    tspec = specs.get("create_ticket")
+    if ticket_calls and tspec is not None \
+            and engine.validate_args(tspec, dict(ticket_calls[0].get("args") or {})) is None:
+        first_args = ticket_calls[0]["args"]
+        decision = interrupt({"type": "confirm_ticket",
+                              "preview": {"ticket_type": first_args.get("ticket_type", "咨询"),
+                                          "description": first_args.get("description", "")}})
+
     tool_msgs = []
     actions = list(state.get("suggested_actions", []))
     for tc in last.tool_calls:
-        if tc["name"] == "create_ticket":
-            draft = {"description": tc["args"].get("description", ""),
-                     "ticket_type": tc["args"].get("ticket_type", "咨询")}
-            actions.append({"type": "create_ticket", "draft": draft})
-            tool_msgs.append(ToolMessage(
-                content="已把『建工单』选项交给用户自行确认。请用一句话简要说明并停止,不要再调用任何工具。",
-                tool_call_id=tc["id"], name="create_ticket"))
-        elif tc["name"] == "submit_refund":
+        if tc["name"] == "submit_refund":
             actions.append({"type": "refund_form",
                             "draft": {"order_id": tc["args"].get("order_id", ""),
                                       "reason": tc["args"].get("reason")}})
             tool_msgs.append(ToolMessage(
                 content="已把『提交退款工单』选项交给用户确认。请用一句话说明这一单可以退款并停止,不要再调用任何工具。",
                 tool_call_id=tc["id"], name="submit_refund"))
+        elif tc["name"] == "create_ticket" and decision is not None:
+            if tc is ticket_calls[0]:
+                if decision.get("confirmed"):
+                    run = await engine.execute_tool_call(tc, cid, specs, confirmed=True)
+                else:
+                    run = await engine.execute_tool_call(
+                        tc, cid, specs, confirmed=False,
+                        deny_note="用户在工单预览卡片上点了取消,本次不建单。请勿再发起,除非用户再次明确要求。")
+                tool_msgs.append(run.tool_message)
+            else:
+                tool_msgs.append(ToolMessage(content="一次只处理一个建工单请求,本次调用已忽略。",
+                                             tool_call_id=tc["id"], name="create_ticket", status="error"))
         else:
-            run = await engine.execute_tool_call(tc, state.get("conversation_id", 0), specs)
+            run = await engine.execute_tool_call(tc, cid, specs)
             tool_msgs.append(run.tool_message)
     out = {"messages": tool_msgs}
     if actions:

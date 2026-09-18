@@ -65,20 +65,6 @@ async def test_agent_tools_executes_normal_tool(monkeypatch):
     assert out["messages"][0].name == "query_logistics"
     assert not out.get("suggested_actions")
 
-
-@pytest.mark.asyncio
-async def test_agent_tools_intercepts_create_ticket(monkeypatch):
-    _patch_specs(monkeypatch)
-
-    async def fake_exec(tc, cid, specs):
-        raise AssertionError("create_ticket 不应被执行(应拦截为提议)")
-
-    monkeypatch.setattr(nodes.engine, "execute_tool_call", fake_exec)
-    ai = AIMessage("", tool_calls=[{"name": "create_ticket",
-                    "args": {"description": "屏幕碎了", "ticket_type": "售后"}, "id": "t9"}])
-    out = await nodes.agent_tools({"messages": [ai], "conversation_id": 5})
-    act = out["suggested_actions"][0]
-    assert act["type"] == "create_ticket"
-    assert act["draft"]["description"] == "屏幕碎了"
-    # 回一条合成 ToolMessage 让模型收敛(不再调工具)
-    assert out["messages"][0].tool_call_id == "t9"
+    # ch08:旧「create_ticket 拦成 suggested_actions」单测随确认流下线——
+    # interrupt 预览/resume 放行/取消/缺参四条路径由 tests/graph/test_ch08_confirm_ticket.py
+    # 在 graph 级覆盖(节点内 interrupt 需编译图,节点级桩测不了)。

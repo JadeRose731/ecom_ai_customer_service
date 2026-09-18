@@ -47,3 +47,22 @@ async def test_resume_endpoint_streams(client, monkeypatch):
     assert payload["kind"] == "select_order"
     assert payload["conversation_id"] == 3
     assert payload["orders"] == [{"order_id": "1001"}]
+
+
+async def test_resume_endpoint_confirmed_branch(client, monkeypatch):
+    """ch08:工单预览确认走同一端点,resume 值为 {"confirmed": bool}(graph 按 confirmed 分派)。"""
+    from app.api import actions
+
+    async def fake_stream_resume(cid, resume_value):
+        assert cid == 3 and resume_value == {"confirmed": True}
+        yield {"type": "delta", "text": "T20260717001"}
+        yield {"type": "done", "conversation_id": 3}
+    monkeypatch.setattr(actions.runtime, "stream_resume", fake_stream_resume)
+    r = await client.post("/api/actions/resume", json={"conversation_id": 3, "confirmed": True})
+    assert r.status_code == 200
+    assert "T20260717001" in r.text and "[DONE]" in r.text
+
+
+async def test_resume_endpoint_requires_one_of_fields(client):
+    r = await client.post("/api/actions/resume", json={"conversation_id": 3})
+    assert r.status_code == 400                   # order_id 与 confirmed 至少传一个

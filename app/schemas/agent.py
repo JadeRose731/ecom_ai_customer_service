@@ -23,4 +23,4 @@ class AgentResponse(BaseModel):
     tool_calls: list[ToolCallView]
     tool_results: list[ToolResultView]
     suggested_actions: list = Field(default_factory=list)
-    interrupt: list | None = Field(default=None, description="待补槽位(如订单选择器 orders);无则 None")
+    interrupt: dict | None = Field(default=None, description="待处理中断载荷(按 type 分派:select_order 带订单选择器 orders;confirm_ticket 带工单预览 preview);无则 None")
