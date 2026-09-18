@@ -1,4 +1,4 @@
-.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06
+.PHONY: dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07
 
 dev:
 	./scripts/dev.sh
@@ -85,3 +85,7 @@ smoke-interrupt:
 # ch06:四验收端到端评估(需全服务起 + 已应用 sql/ch06-ticket-type.sql + 真实 key)
 eval-ch06:
 	PYTHONPATH=. uv run python scripts/eval_ch06.py
+
+# ch07:摘要 prompt 标注样例验证(需真实上游;structured output,不打本地服务)
+eval-ch07:
+	PYTHONPATH=. uv run python -m scripts.eval_ch07
