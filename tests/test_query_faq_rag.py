@@ -2,7 +2,7 @@
 # 子步全 mock;管线里任一真实上游(嵌入/重排/聊天)都没 key,真实链路见 make eval-rag。
 import pytest
 
-from app.tools import business
+from app.tools.builtin import faq
 
 
 @pytest.mark.asyncio
@@ -20,7 +20,7 @@ async def test_query_faq_sufficient(monkeypatch):
     async def fake_check(q, texts): return {"useful": True, "reason": "够"}
     monkeypatch.setattr("app.core.selfcheck.check_sufficient", fake_check)
 
-    out = await business.query_faq.ainvoke({"keyword": "邮费多少"})
+    out = await faq.query_faq.ainvoke({"keyword": "邮费多少"})
     assert out["sufficient"] is True
     assert out["citations"][0]["n"] == 1 and out["citations"][0]["section_path"]
     assert "[1]" in out["evidence"]
@@ -32,7 +32,7 @@ async def test_query_faq_retrieval_low_conf(monkeypatch):
     monkeypatch.setattr("app.core.query_understanding.understand", fake_understand)
     async def fake_search(query, **kw): return []  # 无召回
     monkeypatch.setattr("app.core.retrieval.search_knowledge", fake_search)
-    out = await business.query_faq.ainvoke({"keyword": "火星车怎么买"})
+    out = await faq.query_faq.ainvoke({"keyword": "火星车怎么买"})
     assert out["sufficient"] is False and out["source"] == "retrieval_low_conf"
 
 
@@ -46,7 +46,7 @@ async def test_query_faq_self_check_fail(monkeypatch):
     monkeypatch.setattr("app.core.retrieval.search_knowledge", fake_search)
     async def fake_check(q, texts): return {"useful": False, "reason": "问型号但证据只讲运费"}
     monkeypatch.setattr("app.core.selfcheck.check_sufficient", fake_check)
-    out = await business.query_faq.ainvoke({"keyword": "Pro型号能自动铲屎吗"})
+    out = await faq.query_faq.ainvoke({"keyword": "Pro型号能自动铲屎吗"})
     assert out["sufficient"] is False and out["source"] == "self_check"
     assert "型号" in out["reason"]
 
@@ -60,5 +60,5 @@ async def test_query_faq_low_rerank_score_refuses(monkeypatch):
         return [{"id": 1, "rerank_score": 0.05, "question": "q", "answer": "a",
                  "section_path": "p", "content_type": "faq", "category": "c"}]
     monkeypatch.setattr("app.core.retrieval.search_knowledge", fake_search)
-    out = await business.query_faq.ainvoke({"keyword": "随便什么"})
+    out = await faq.query_faq.ainvoke({"keyword": "随便什么"})
     assert out["sufficient"] is False and out["source"] == "retrieval_low_conf"

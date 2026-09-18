@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.tools import registry as tool_registry
+    tool_registry.scan_builtin()   # ch08:内置工具服务启动时登记
     # ch05:起图(checkpointer 打开 + setup + 编译)。失败即启动失败,不带病服务。
     await runtime.init_graph()
     yield

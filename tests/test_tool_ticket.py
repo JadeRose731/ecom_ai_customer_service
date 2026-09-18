@@ -1,6 +1,6 @@
 # tests/test_tool_ticket.py
 from app.db.models import Conversation, Ticket
-from app.tools.business import create_ticket
+from app.tools.builtin.tickets import create_ticket
 
 def test_conversation_id_hidden_from_model_schema():
     # InjectedToolArg 的参数不出现在暴露给 LLM 的 tool-call schema(bind_tools 实际发的就是它);

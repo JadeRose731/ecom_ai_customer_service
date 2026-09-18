@@ -25,7 +25,7 @@ from app.core import retrieval
 from app.core.llm import get_chat_model
 from app.core.prompts import FAITHFULNESS_PROMPT, RAG_ANSWER_PROMPT
 from app.db import repository
-from app.tools.business import query_faq
+from app.tools.builtin.faq import query_faq
 
 # 默认四策略全跑;无 key 阶段可 EVAL_STRATEGIES=bm25 只跑确定性的纯 BM25 行
 STRATEGIES = [s.strip() for s in os.environ.get(
