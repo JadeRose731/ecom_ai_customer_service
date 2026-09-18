@@ -13,10 +13,11 @@ _DDL_FILES = [
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch03-ddl.sql",
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch04-ddl.sql",
     pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch07-ddl.sql",
+    pathlib.Path(__file__).resolve().parent.parent / "sql" / "ch08-ddl.sql",
 ]
 # 删除顺序:先子表后父表;knowledge_chunks 自引用 FK 靠 FOREIGN_KEY_CHECKS=0 兜
-_TABLES = ["low_confidence_questions", "faith_cases", "messages", "tickets", "conversations", "faq",
-           "qa_extraction_staging", "knowledge_chunks"]
+_TABLES = ["low_confidence_questions", "faith_cases", "messages", "tickets", "tool_audit_logs",
+           "conversations", "faq", "qa_extraction_staging", "knowledge_chunks"]
 
 
 def _create_table_stmts() -> list[str]:

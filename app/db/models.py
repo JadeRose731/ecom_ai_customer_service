@@ -139,3 +139,24 @@ class FaithCase(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class ToolAuditLog(Base):
+    """ch08 工具调用审计:每次工具执行(含被校验/权限拦下的)落一条。"""
+    __tablename__ = "tool_audit_logs"
+    # server_default 列在 INSERT 后由 eager_defaults 立即取回(理由同 Conversation)
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # 不挂 FK:审计不能被引用约束拦
+    tool_call_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tool_name: Mapped[str] = mapped_column(String(128))
+    tool_source: Mapped[str] = mapped_column(Enum("builtin", "mcp"))
+    mcp_server: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    arguments: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Enum("成功", "失败", "超时", "校验拦下", "权限拒绝"))
+    error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

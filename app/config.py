@@ -40,5 +40,12 @@ class Settings(BaseSettings):
     context_window_turns: int = 8         # 摘要后保留原文的最近轮数(需求 5-10 取中)
     context_window_max_tokens: int = 3000 # 滑窗 token 上限(trim_messages 兜底)
     summary_model: str = ""               # 摘要模型,空=回落 chat_model
+    # ch08 工具系统(注册中心 + 执行引擎 + MCP 接入)
+    mcp_logistics_url: str = "http://127.0.0.1:8101/mcp"    # 物流 MCP Server
+    mcp_aftersales_url: str = "http://127.0.0.1:8102/mcp"   # 售后 MCP Server
+    tool_default_timeout: float = 5.0    # 内置工具默认超时(秒)
+    mcp_tool_timeout: float = 10.0       # MCP 工具默认超时(走 HTTP,放宽)
+    tool_max_retries: int = 2            # 只读工具暂时性故障最大重试次数
+    demo_ticket_delay_seconds: float = 0.0  # 验收 6:>0 时 create_ticket 人为变慢(写超时演示)
 
 settings = Settings()
