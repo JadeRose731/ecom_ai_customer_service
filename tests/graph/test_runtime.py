@@ -7,6 +7,7 @@ from app.graph import runtime
 async def test_run_turn_creates_conversation_when_none(monkeypatch):
     async def fake_create(uid): return 42
     async def fake_append(cid, role, content=None, **k): return 1
+    async def fake_get(cid): return None   # ch07:轮后 maybe_schedule 也能安全 noop
 
     class FakeGraph:
         async def ainvoke(self, inp, config):
@@ -14,6 +15,7 @@ async def test_run_turn_creates_conversation_when_none(monkeypatch):
 
     monkeypatch.setattr(runtime.repository, "create_conversation", fake_create)
     monkeypatch.setattr(runtime.repository, "append_message", fake_append)
+    monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
     monkeypatch.setattr(runtime, "get_graph", lambda: FakeGraph())
 
     out = await runtime.run_turn("u1", "你好", None)
@@ -32,8 +34,10 @@ async def test_run_turn_raises_when_conversation_missing(monkeypatch):
 async def test_stream_turn_maps_events(monkeypatch):
     async def fake_create(uid): return 7
     async def fake_append(cid, role, content=None, **k): return 1
+    async def fake_get(cid): return None   # ch07:轮后 maybe_schedule 也能安全 noop
     monkeypatch.setattr(runtime.repository, "create_conversation", fake_create)
     monkeypatch.setattr(runtime.repository, "append_message", fake_append)
+    monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
 
     from langchain_core.messages import AIMessage, ToolMessage
 
@@ -68,8 +72,10 @@ async def test_stream_turn_maps_events(monkeypatch):
 async def test_stream_turn_emits_interrupt_event(monkeypatch):
     async def fake_create(uid): return 9
     async def fake_append(cid, role, content=None, **k): return 1
+    async def fake_get(cid): return None   # ch07:中断流结束后轮后触发也安全 noop
     monkeypatch.setattr(runtime.repository, "create_conversation", fake_create)
     monkeypatch.setattr(runtime.repository, "append_message", fake_append)
+    monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
 
     class Intr:
         def __init__(self, value): self.value = value
@@ -91,6 +97,8 @@ async def test_stream_turn_emits_interrupt_event(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_resume_turn_drives_command(monkeypatch):
+    from types import SimpleNamespace
+
     from langgraph.types import Command
     seen = {}
 
@@ -99,8 +107,11 @@ async def test_resume_turn_drives_command(monkeypatch):
             seen["is_command"] = isinstance(inp, Command)
             seen["resume"] = getattr(inp, "resume", None)
             return {"answer": "这一单可以退款", "messages": []}
-    async def fake_get(cid): return object()
+    # ch07:resume 后轮后触发读摘要边界 → 返回带字段的 conv + 计数 0(不触发)
+    async def fake_get(cid): return SimpleNamespace(summary_upto_msg_id=None)
+    async def fake_count(cid, after_id): return 0
     monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
+    monkeypatch.setattr(runtime.repository, "count_messages_after", fake_count)
     monkeypatch.setattr(runtime, "get_graph", lambda: FakeGraph())
     out = await runtime.resume_turn(5, "1001")
     assert seen["is_command"] and seen["resume"] == "1001"
@@ -118,6 +129,8 @@ async def test_stream_resume_missing_conversation_raises(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_resume_passes_command(monkeypatch):
+    from types import SimpleNamespace
+
     from langchain_core.messages import AIMessage
     from langgraph.types import Command
     seen = {}
@@ -128,8 +141,11 @@ async def test_stream_resume_passes_command(monkeypatch):
             seen["resume"] = getattr(inp, "resume", None)
             yield ("messages", (AIMessage("这一单可以退款"), {"langgraph_node": "agent_llm"}))
 
-    async def fake_get(cid): return object()
+    # ch07:流结束后轮后触发读摘要边界 → 返回带字段的 conv + 计数 0(不触发)
+    async def fake_get(cid): return SimpleNamespace(summary_upto_msg_id=None)
+    async def fake_count(cid, after_id): return 0
     monkeypatch.setattr(runtime.repository, "get_conversation", fake_get)
+    monkeypatch.setattr(runtime.repository, "count_messages_after", fake_count)
     monkeypatch.setattr(runtime, "get_graph", lambda: FakeGraph())
     events = [e async for e in runtime.stream_resume(5, "1001")]
     assert seen["is_command"] and seen["resume"] == "1001"
@@ -148,7 +164,7 @@ def test_dedup_actions_keep_first():
 
 def test_graph_input_resets_per_turn_output_channels():
     """入口把上一轮输出通道全部清零,防跨轮泄漏(ch05 C1)。"""
-    inp = runtime._graph_input("u1", "你好", 42)
+    inp = runtime._graph_input("u1", "你好", 42, 77, "旧摘要", 8)
     # ch05 输出通道
     assert inp["intent"] == ""
     assert inp["route"] == ""
@@ -161,3 +177,6 @@ def test_graph_input_resets_per_turn_output_channels():
     # ch06 四个无 reducer 标量
     assert inp["resolved_query"] == "" and inp["intent_confidence"] == 0.0
     assert inp["order_id"] == "" and inp["order_data"] == {}
+    # ch07:用户消息带 db-{msg_id} 锚点;摘要两字段每轮刷新
+    assert inp["messages"][0].id == "db-77" and inp["messages"][0].content == "你好"
+    assert inp["summary"] == "旧摘要" and inp["summary_upto_msg_id"] == 8

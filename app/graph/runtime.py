@@ -7,6 +7,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
 from app.config import settings
+from app.core import summarizer
 from app.db import repository
 from app.graph.build import build_graph
 
@@ -68,23 +69,29 @@ def get_graph():
     return _graph
 
 
-async def _ensure_conversation(user_id: str, conversation_id: int | None) -> int:
+async def _ensure_conversation(user_id: str, conversation_id: int | None) -> tuple[int, str, int]:
+    """返回 (cid, summary, summary_upto_msg_id):入口一次库读把摘要两字段一并带出。"""
     if conversation_id is None:
-        return await repository.create_conversation(user_id)
-    if await repository.get_conversation(conversation_id) is None:
+        return await repository.create_conversation(user_id), "", 0
+    conv = await repository.get_conversation(conversation_id)
+    if conv is None:
         raise ConversationNotFound(conversation_id)
-    return conversation_id
+    return conversation_id, conv.summary or "", conv.summary_upto_msg_id or 0
 
 
-def _graph_input(user_id: str, message: str, cid: int) -> dict:
+def _graph_input(user_id: str, message: str, cid: int, msg_id: int,
+                 summary: str, summary_upto: int) -> dict:
     # 每轮入口把输出通道清零,防上一轮残留跨轮泄漏(ch05 C1);
-    # resume 走 Command(resume=...) 不经此函数,order_id 回填不受影响
-    return {"messages": [HumanMessage(message)], "user_id": user_id,
+    # resume 走 Command(resume=...) 不经此函数,order_id 回填不受影响。
+    # ch07:用户消息带 db-{msg_id} 锚点(摘要边界对齐);summary 两字段每轮刷新。
+    return {"messages": [HumanMessage(message, id=f"db-{msg_id}")], "user_id": user_id,
             "conversation_id": cid, "steps": 0, "tokens_used": 0,
             "intent": "", "route": "", "evidence": "", "citations": [],
             "evidence_strong": False, "answer": "", "suggested_actions": [],
             "resolved_query": "", "intent_confidence": 0.0,
-            "order_id": "", "order_data": {}}
+            "order_id": "", "order_data": {},
+            "summary": summary, "summary_upto_msg_id": summary_upto,
+            "trace": None}
 
 
 def _interrupt_orders(state: dict):
@@ -97,10 +104,12 @@ def _interrupt_orders(state: dict):
 
 async def run_turn(user_id, message, conversation_id) -> dict:
     """非流式:落 user 消息 → ainvoke → 返回终态(供 /api/agent、eval)。"""
-    cid = await _ensure_conversation(user_id, conversation_id)
-    await repository.append_message(cid, "user", content=message)
+    cid, summary, upto = await _ensure_conversation(user_id, conversation_id)
+    msg_id = await repository.append_message(cid, "user", content=message)
     config = {"configurable": {"thread_id": str(cid)}}
-    final = await get_graph().ainvoke(_graph_input(user_id, message, cid), config)
+    final = await get_graph().ainvoke(
+        _graph_input(user_id, message, cid, msg_id, summary, upto), config)
+    await summarizer.maybe_schedule_summary(cid)     # 轮后触发检查(后台,不阻塞返回)
     return {"conversation_id": cid, "state": final, "interrupt": _interrupt_orders(final)}
 
 
@@ -110,16 +119,18 @@ async def resume_turn(conversation_id: int, resume_value) -> dict:
         raise ConversationNotFound(conversation_id)
     config = {"configurable": {"thread_id": str(conversation_id)}}
     final = await get_graph().ainvoke(Command(resume=resume_value), config)
+    await summarizer.maybe_schedule_summary(conversation_id)
     return {"conversation_id": conversation_id, "state": final,
             "interrupt": _interrupt_orders(final)}
 
 
 async def stream_turn(user_id, message, conversation_id) -> AsyncIterator[dict]:
     """流式:落 user 消息 → astream 多模式 → 映射成事件 dict(供 /api/chat 转 SSE)。"""
-    cid = await _ensure_conversation(user_id, conversation_id)
-    await repository.append_message(cid, "user", content=message)
-    async for ev in _stream_events(cid, _graph_input(user_id, message, cid)):
+    cid, summary, upto = await _ensure_conversation(user_id, conversation_id)
+    msg_id = await repository.append_message(cid, "user", content=message)
+    async for ev in _stream_events(cid, _graph_input(user_id, message, cid, msg_id, summary, upto)):
         yield ev
+    await summarizer.maybe_schedule_summary(cid)
 
 
 async def stream_resume(conversation_id: int, resume_value) -> AsyncIterator[dict]:
@@ -128,6 +139,7 @@ async def stream_resume(conversation_id: int, resume_value) -> AsyncIterator[dic
         raise ConversationNotFound(conversation_id)
     async for ev in _stream_events(conversation_id, Command(resume=resume_value)):
         yield ev
+    await summarizer.maybe_schedule_summary(conversation_id)
 
 
 async def _stream_events(cid: int, stream_source) -> AsyncIterator[dict]:

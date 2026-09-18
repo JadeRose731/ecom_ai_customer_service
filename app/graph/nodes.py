@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langgraph.types import interrupt
 
 from app.config import settings
-from app.core import coref
+from app.core import coref, memory
 from app.core import intent as intent_mod
 from app.core import query_understanding, retrieval, selfcheck
 from app.core.llm import get_chat_model
@@ -34,8 +34,11 @@ def _user_text(state) -> str:
 
 
 def _history_text(state, max_turns: int = 6) -> str:
-    """把最近若干轮 human/ai 消息(不含本轮最后一条 human)压成紧凑文本,供 coref/意图读上下文。"""
-    msgs = state.get("messages", [])
+    """摘要行 + 滑窗内最近若干轮(不含本轮最后一条 human),供 coref/意图读上下文。
+    ch07:先按摘要边界切窗,再取尾——跨滑窗的指代靠摘要行兜住。"""
+    msgs = memory.build_window(state.get("messages", []),
+                               state.get("summary_upto_msg_id") or 0,
+                               settings.context_window_max_tokens)
     prior = msgs[:-1] if msgs else []
     lines = []
     for m in prior[-max_turns:]:
@@ -43,7 +46,9 @@ def _history_text(state, max_turns: int = 6) -> str:
         text = m.content if isinstance(m.content, str) else ""
         if text:
             lines.append(f"{role}:{text}")
-    return "\n".join(lines)
+    body = "\n".join(lines)
+    head = memory.summary_line(state.get("summary"))
+    return f"{head}\n{body}".strip() if head else body
 
 
 async def complaint_reply(state) -> dict:
@@ -190,14 +195,54 @@ _KNOWLEDGE_EVIDENCE_HINT = (
 )
 
 
-def _agent_messages(state) -> list:
-    """system(有证据就拼,知识路/退款路通用;退款路再拼 order_data + 判定指令) + 跨轮历史。"""
-    sys = AGENT_SYSTEM
+TURN_CTX_ID = "turn-ctx"   # 哨兵:日志据此把注入块跟真实用户消息分开。只能用 id 不能用 name
+                           # ——name 会被序列化发给上游,改变请求字节;id 不会。
+
+
+def _turn_context(state) -> str:
+    """本轮才有的材料:早前摘要 + 检索证据 + 退款路的订单数据。没有就返回空串。
+
+    摘要排最前(它讲的是更早发生的事);顺序不能反:REFUND_JUDGE_HINT 的措辞是
+    「下面给出该订单数据与检索到的退换货政策证据」,它假设证据已在前文给过。"""
+    parts = []
+    ss = memory.summary_system(state.get("summary"))
+    if ss is not None:
+        parts.append("\n\n" + ss.content)
     if state.get("evidence"):
-        sys = sys + _KNOWLEDGE_EVIDENCE_HINT + state["evidence"]
+        parts.append(_KNOWLEDGE_EVIDENCE_HINT + state["evidence"])
     if state.get("route") == "refund_flow":
-        sys = sys + REFUND_JUDGE_HINT + json.dumps(state.get("order_data", {}), ensure_ascii=False)
-    return [SystemMessage(sys), *state.get("messages", [])]
+        parts.append(REFUND_JUDGE_HINT + json.dumps(state.get("order_data", {}), ensure_ascii=False))
+    return "".join(parts)     # 三段文本逐字沿用原来的常量,一个字都不改:这次只挪位置
+
+
+def _with_turn_context(window: list, turn_ctx: str) -> list:
+    """插在滑窗里最后一条用户消息之后:ReAct 第 2 步的 [Sys,问,材料,AI,Tool] 要完整
+    包含第 1 步的 [Sys,问,材料] 作前缀,轮内才命中缓存。窗内无用户消息则退化成追加。"""
+    msg = HumanMessage(turn_ctx, id=TURN_CTX_ID)
+    for i in range(len(window) - 1, -1, -1):
+        if isinstance(window[i], HumanMessage):
+            return [*window[:i + 1], msg, *window[i + 1:]]
+    return [*window, msg]
+
+
+def _agent_messages(state) -> list:
+    """拼装顺序固定(ch07):人设+红线 system → 滑窗原文 → 摘要与本轮材料(紧跟用户那句)。
+
+    整条消息列表里**只有一条 SystemMessage**,内容恒为 AGENT_SYSTEM。这不是洁癖:
+    上游的 chat template 会把列表里所有 system 消息上提、合并成一个头部块渲染,所以
+    「摘要单独放第二条 system」等于把它拼在了 AGENT_SYSTEM 后面,工具 schema 被挤到
+    可变内容之后 —— 而 prompt caching 按渲染后的前缀精确匹配,于是整段前缀全 miss。
+    实测:无摘要的会话 cache_read=2048,摘要一进 system 就掉到 0。
+    摘要因此跟证据一起走用户侧那条消息。
+
+    滑窗=摘要边界锚点切 + trim_messages token 兜底;State 全量历史不动,这里只现拼精简版。"""
+    window = memory.build_window(state.get("messages", []),
+                                 state.get("summary_upto_msg_id") or 0,
+                                 settings.context_window_max_tokens)
+    turn_ctx = _turn_context(state)
+    if turn_ctx:
+        window = _with_turn_context(window, turn_ctx)
+    return [SystemMessage(AGENT_SYSTEM), *window]
 
 
 async def agent_llm(state, config=None) -> dict:

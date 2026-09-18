@@ -1,6 +1,7 @@
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from app.core.prompts import AGENT_SYSTEM
 from app.graph import nodes
 
 
@@ -9,8 +10,10 @@ def test_agent_messages_injects_evidence_on_knowledge():
         {"route": "knowledge", "evidence": "[1] 退货: 7天",
          "messages": [HumanMessage("能退吗")]})
     assert isinstance(msgs[0], SystemMessage)
-    assert "[1] 退货: 7天" in msgs[0].content
-    assert "query_faq" in msgs[0].content  # 指示别再检索
+    assert msgs[0].content == AGENT_SYSTEM          # ch07:system 恒为静态人设,证据挪用户侧
+    ctx = msgs[-1]                                   # 材料消息插在用户那句之后
+    assert "[1] 退货: 7天" in ctx.content
+    assert "query_faq" in ctx.content  # 指示别再检索
 
 
 def test_agent_messages_no_evidence_on_business():

@@ -258,6 +258,7 @@ async def test_agent_tools_intercepts_submit_refund():
 
 
 def test_agent_messages_injects_order_and_policy_on_refund():
+    from app.core.prompts import AGENT_SYSTEM
     msgs = nodes._agent_messages({
         "route": "refund_flow",
         "order_data": {"order_id": "1001", "status": "已签收", "product": "猫粮 5kg"},
@@ -265,15 +266,17 @@ def test_agent_messages_injects_order_and_policy_on_refund():
         "messages": [HumanMessage("这单能退吗")]})
     sys = msgs[0]
     assert isinstance(sys, SystemMessage)
-    assert "7天无理由" in sys.content                        # 政策证据注入
-    assert "猫粮 5kg" in sys.content and "submit_refund" in sys.content  # 订单数据 + 判定指令
+    assert sys.content == AGENT_SYSTEM                       # ch07:system 恒为静态人设
+    ctx = msgs[-1]                                           # 摘要/证据/订单数据都在用户侧材料消息
+    assert "7天无理由" in ctx.content                        # 政策证据注入
+    assert "猫粮 5kg" in ctx.content and "submit_refund" in ctx.content  # 订单数据 + 判定指令
 
 
 def test_agent_messages_knowledge_path_still_injects_evidence():
     msgs = nodes._agent_messages({
         "route": "knowledge", "evidence": "[1] 运费: 满99包邮",
         "messages": [HumanMessage("运费多少")]})
-    assert "满99包邮" in msgs[0].content                     # 放宽条件后知识路不回归
+    assert "满99包邮" in msgs[-1].content                    # 放宽条件后知识路不回归(用户侧材料)
 
 
 @pytest.mark.asyncio
