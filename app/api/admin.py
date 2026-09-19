@@ -86,7 +86,10 @@ _CARDS = (
      lambda m: ("todo", f"推荐阈值 {m['recommended_threshold']} ≠ 在用 {m['current_threshold']},该回填")
      if m.get("recommended_threshold") is not None and not m.get("in_sync")
      else ("empty", "还没校准(校准作业可发起)") if not m.get("in_sync")
-     else ("ok", f"最烧钱 {m['top_intent'] or '—'} {m['top_share']:.0%} · 忠实度 {m['faithfulness']}")),
+     else ("ok", " · ".join(filter(None, (
+         f"忠实度 {m['faithfulness']}" if m.get("faithfulness") is not None else None,
+         f"最烧钱 {m['top_intent']} {m['top_share']:.0%}" if m.get("top_share") is not None else None,
+     ))) or "评估与成本还没数据(观测页可发起)")),
 )
 
 

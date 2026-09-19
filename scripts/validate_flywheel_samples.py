@@ -16,8 +16,9 @@ THRESHOLD = 0.8
 
 
 async def main():
-    samples = json.load(open(pathlib.Path(__file__).resolve().parent.parent
-                             / "tests/data/flywheel_samples.json", encoding="utf-8"))
+    with open(pathlib.Path(__file__).resolve().parent.parent
+              / "tests/data/flywheel_samples.json", encoding="utf-8") as f:
+        samples = json.load(f)
     passed = 0
     for s in samples:
         try:

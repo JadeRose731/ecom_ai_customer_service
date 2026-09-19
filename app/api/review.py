@@ -1,6 +1,7 @@
 """ch09 审核后台 API:待审队列列表/详情/通过(写回知识库)/驳回。
-通过 = 核准答案以 QA chunk 走 ch03 落库流程(write_pending → vectorize_pending 同步),
-向量化成功才置「通过」——保证审核页点了通过,下一问就能检索命中(验收 3)。"""
+通过 = 原子占位状态(条件 UPDATE,并发双击只有一个过闸)→ 清 pending 残件 → 核准答案以
+QA chunk 走 ch03 落库流程(write_pending → vectorize_pending 同步);写回失败退回待审可重试,
+重试前清残件保证 Milvus 不出重复证据——审核页点了通过,下一问就能检索命中(验收 3)。"""
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -59,19 +60,26 @@ async def approve(review_id: int, req: ApproveRequest) -> dict:
     if item.review_status != "待审":
         raise HTTPException(status_code=409, detail=f"当前状态为「{item.review_status}」,不可再审")
 
+    # 先原子占位(条件 UPDATE,并发双击只有一个能过闸),过了闸才允许写知识库
+    if not await repository.claim_review(review_id, req.approved_answer):
+        raise HTTPException(status_code=409, detail="仅待审状态可通过")
+
+    section_path = f"飞轮沉淀 / {item.normalized_question}"
     chunk = Chunk(
         category="飞轮沉淀", questions=item.normalized_question, answer=req.approved_answer,
-        section_path=f"飞轮沉淀 / {item.normalized_question}", content_type="faq",
+        section_path=section_path, content_type="faq",
         is_key_clause=_is_key(item.normalized_question, req.approved_answer),
     )
     try:
+        # 清上次写回失败留下的 pending 残件——不清,vectorize_pending 会把残件和新件都送进 Milvus
+        await repository.delete_pending_chunks_by_section(section_path)
         chunk_ids = await _write_chunks([chunk])
         await _vectorize()
     except Exception:
-        logger.exception("审核写回知识库失败 review=%s(状态保持待审,可重试)", review_id)
+        logger.exception("审核写回知识库失败 review=%s(状态退回待审,可重试)", review_id)
+        await repository.revert_review_claim(review_id)
         raise HTTPException(status_code=502, detail="写回知识库失败(检查上游/Milvus),状态未变可重试")
 
-    await repository.update_review_status(review_id, "通过", approved_answer=req.approved_answer)
     logger.info("审核通过 review=%s → knowledge_chunks %s(已向量化,下一问可检索)", review_id, chunk_ids)
     return {"ok": True, "chunk_ids": chunk_ids}
 

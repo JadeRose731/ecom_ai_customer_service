@@ -45,7 +45,8 @@ def _dist(name, xs) -> dict:
 
 
 async def main():
-    samples = [json.loads(ln) for ln in open(_ROOT / "tests/data/eval_ch04.jsonl", encoding="utf-8")]
+    with open(_ROOT / "tests/data/eval_ch04.jsonl", encoding="utf-8") as f:
+        samples = [json.loads(ln) for ln in f]
     results = await asyncio.gather(*(_conf(s) for s in samples))
     answerable = [c for b, c in results if b in ANSWERABLE]
     absent = [c for b, c in results if b == "D_absent"]

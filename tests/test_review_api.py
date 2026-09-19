@@ -89,6 +89,50 @@ async def test_approve_failure_keeps_pending(client, monkeypatch):
     assert r2.json()["review_status"] == "待审"   # 可重试
 
 
+async def test_approve_retry_clears_orphan_pending_chunks(client, monkeypatch):
+    """写回失败留下的 pending 残件,重试通过时必须被清掉——vectorize_pending 捞全部 pending,
+    不清会把残件和新件一起送进 Milvus,知识库从此检索出重复证据(ch09 review #2)。"""
+    rid = await _seed()
+    section_path = "飞轮沉淀 / 猫窝是否支持水洗"
+
+    async def real_write(chunks):   # 第一腿不 stub:真插一行 pending,复现残件现场
+        c = chunks[0]
+        cid = await repository.insert_knowledge_chunk(
+            c.category, c.questions, c.answer,
+            section_path=c.section_path, content_type=c.content_type, is_key_clause=c.is_key_clause)
+        return [cid]
+
+    async def boom():
+        raise RuntimeError("Milvus 不可用")
+
+    monkeypatch.setattr(review_api, "_write_chunks", real_write)
+    monkeypatch.setattr(review_api, "_vectorize", boom)
+    assert (await client.post(f"/api/review/{rid}/approve",
+                              json={"approved_answer": "可以水洗"})).status_code == 502
+    pending = [c for c in await repository.list_pending_chunks() if c.section_path == section_path]
+    assert len(pending) == 1                     # 失败现场:残件在库
+
+    async def fake_write(chunks):   # 第二腿 stub:新件不落真库,断言聚焦「残件被清」
+        return [202]
+
+    async def fake_vectorize():
+        return 1
+
+    monkeypatch.setattr(review_api, "_write_chunks", fake_write)
+    monkeypatch.setattr(review_api, "_vectorize", fake_vectorize)
+    assert (await client.post(f"/api/review/{rid}/approve",
+                              json={"approved_answer": "可以水洗"})).status_code == 200
+    assert not [c for c in await repository.list_pending_chunks() if c.section_path == section_path]
+
+
+async def test_claim_review_is_one_shot(db_session_factory, db_clean):
+    rid = await repository.insert_review_item("q", "a")
+    assert await repository.claim_review(rid, "第一次") is True
+    assert await repository.claim_review(rid, "第二次") is False   # 并发双击只有一个过闸
+    row = await repository.get_review_detail(rid)
+    assert row[0].approved_answer == "第一次"                     # 后到的写不进去
+
+
 async def test_reject_flips_status(client):
     rid = await _seed()
     assert (await client.post(f"/api/review/{rid}/reject")).status_code == 200

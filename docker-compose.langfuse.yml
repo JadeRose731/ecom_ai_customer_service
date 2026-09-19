@@ -110,7 +110,7 @@ services:
     restart: always
     depends_on: *langfuse-depends-on
     ports:
-      - 3000:3000
+      - 127.0.0.1:3000:3000   # 收回环:全栈带聊天 trace,不对局域网开放(ch09 review #3)
     environment:
       <<: *langfuse-worker-env
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-mysecret} # CHANGEME
@@ -164,7 +164,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-miniosecret} # CHANGEME
     ports:
-      - 9090:9000
+      - 127.0.0.1:9090:9000    # 收回环,与同文件其余服务一致(ch09 review #3)
       - 127.0.0.1:19091:9001   # 宿主 9091 被 milvus 占,控制台挪 19091
     volumes:
       - langfuse_minio_data:/data

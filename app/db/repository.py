@@ -1,7 +1,7 @@
 # app/db/repository.py
 from datetime import datetime
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, delete, func, select, update
 
 import app.db.base as db          # 用模块属性引用,便于测试 monkeypatch async_session
 from app.db.models import (
@@ -112,6 +112,20 @@ async def mark_chunk_vectorized(chunk_id: int, vector_id: str) -> None:
             row.vector_id = vector_id
             row.vectorize_status = "done"
             await s.commit()
+
+
+async def delete_pending_chunks_by_section(section_path: str) -> int:
+    """清某 section 的 pending 残件。审核写回失败后重试前必调——vectorize_pending 捞全部 pending,
+    不清会把上次失败行和新行一起送进 Milvus,知识库从此检索出重复证据(ch09 review)。"""
+    async with db.async_session() as s:
+        result = await s.execute(
+            delete(KnowledgeChunk).where(
+                KnowledgeChunk.section_path == section_path,
+                KnowledgeChunk.vectorize_status == "pending",
+            )
+        )
+        await s.commit()
+        return result.rowcount
 
 async def set_chunk_neighbors(chunk_id: int, prev_id: int | None, next_id: int | None) -> None:
     async with db.async_session() as s:
@@ -315,6 +329,30 @@ async def update_review_status(review_id: int, status: str, approved_answer: str
             row.approved_answer = approved_answer
         await s.commit()
         return True
+
+
+async def claim_review(review_id: int, approved_answer: str) -> bool:
+    """原子占位(条件 UPDATE 在库上判「待审」):审核通过先占位再写知识库——
+    先写后改状态的话,并发双击/重试会各自插一份同内容 chunk(ch09 review)。"""
+    async with db.async_session() as s:
+        result = await s.execute(
+            update(ReviewQueue)
+            .where(ReviewQueue.id == review_id, ReviewQueue.review_status == "待审")
+            .values(review_status="通过", approved_answer=approved_answer)
+        )
+        await s.commit()
+        return result.rowcount == 1
+
+
+async def revert_review_claim(review_id: int) -> None:
+    """占位后写回失败的补偿:退回待审并清核准答案。只有占位成功者会调,无条件回退安全。"""
+    async with db.async_session() as s:
+        await s.execute(
+            update(ReviewQueue)
+            .where(ReviewQueue.id == review_id)
+            .values(review_status="待审", approved_answer=None)
+        )
+        await s.commit()
 
 
 async def insert_eval_run(triggered_by: str, dataset_size: int, metrics: dict) -> int:

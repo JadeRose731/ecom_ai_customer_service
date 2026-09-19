@@ -35,7 +35,8 @@ async def test_fallback_reply_records_low_confidence(monkeypatch):
     monkeypatch.setattr(nodes.repository, "insert_low_confidence", fake_insert)
     out = await nodes.fallback_reply(
         {"messages": [HumanMessage("怎么注销账号")], "conversation_id": 3,
-         "trace": {"evidence_top": 0.1}}
+         "trace": {"confidence_signals": {"top1_score": 0.1, "valid_count": 0,
+                                          "margin": 0.1, "key_clause_hit": False}}}
     )
     assert out["answer"] == nodes.FALLBACK_REPLY
     assert calls["source"] == "retrieval_low_conf"

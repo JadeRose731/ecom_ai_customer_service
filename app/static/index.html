@@ -322,21 +322,24 @@ function addFeedbackBar(shell) {
     }
     return '';
   };
-  const pick = (good, chosen, other) => () => {
-    if (locked) return;
-    locked = true;
-    chosen.classList.add('active');
-    other.classList.add('dim');
-    note.textContent = '已反馈';
-    fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        conversation_id: Number(conversationId),
-        rating: chosen === down ? 'down' : 'up',
-        question: userQuestionBefore(bar),
-      }),
-    }).catch(() => {});
+  const pick = (good, chosen, other) => {
+    let locked = false;
+    return () => {
+      if (locked) return;
+      locked = true;
+      chosen.classList.add('active');
+      other.classList.add('dim');
+      note.textContent = '已反馈';
+      fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conversationId ? Number(conversationId) : null,
+          rating: chosen === down ? 'down' : 'up',
+          question: userQuestionBefore(bar),
+        }),
+      }).catch(() => {});
+    };
   };
   up.addEventListener('click', pick(true, up, down));
   down.addEventListener('click', pick(false, down, up));

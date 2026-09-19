@@ -185,6 +185,25 @@ uv run uvicorn app.main:app --port 8000
 - **验收入口**:聊天问「订单 1001 的物流到哪了」→ Agent 经 MCP query_logistics 应答(中文状态,审计表见 mcp/成功行);「帮我建个工单」→ 追问 → 补「猫砂盆漏电」→ 工单预览卡 → 确认提交 → tickets 落新单且回复带工单号(取消则无新单 + 审计「权限拒绝」);问「最近有什么优惠活动」前 `cp scripts/demo_ch08_promotions.py.txt app/tools/builtin/promotions.py` 重启即用(演示完删);验收 3 热插拔/验收 6 超时重试的机制层已无 key 实证(dev-notes),对话层验收待 key(`make eval-ch08`)。
 - **引擎红线已钉死**(tests/tools/test_engine.py):校验不过不执行、写无确认必拒绝且永不重试、审计炸了不拦执行、MCP content blocks 解包后才进格式化;MCP 现问现拿红线在 tests/tools/test_mcp_client.py(Server 全挂降级跳过、重名内置优先、格式化钩子挂对)。
 
+## ch09:数据飞轮闭环(低置信入审 → 人工裁决写回 + 观测三报表)
+
+低置信命中不再悄悄漏掉:证据置信度低于阈值的召回把**命中 chunks 快照**(`retrieved_chunks`)一并落库,按归一化问题查重后进 `review_queue` 待审(全部状态都参与查重,命中只 `occurrence_count+1` 不另开件),形成「答不好 → 人裁决 → 沉淀回库 → 下次答好」的飞轮。**审核三道闸**:/api/review **通过即写回**——问题归一化建「飞轮沉淀」Chunk 双写 MySQL+Milvus(vectorize 走 `milvus_client.acall` 丢线程池,批量 upsert+flush 秒级不占事件循环),写回失败 502 状态保持待审可重试不丢件;**驳回即终审**(不进暂存不再复审);已裁决件不可再操作。审核页 `/review` 队列/详情/原始快照一站式(命中来源三色标 + rerank 分条),三道闸规则常驻页头。**观测三报表**(`/observability`,各挂独立重跑作业、互不连坐):①意图成本账——Langfuse v4 metrics API 按 `intent:` tag 聚合 token(observations 视图主路分组 + 逐意图过滤回退,trace 视图 v4 不支持系实测),哪类意图最烧钱现形;②评估趋势——复用 ch04 全量指标定期跑进 `eval_runs`,最近十轮新在上,任何指标较上轮下滑标 ⚠;③置信度校准——全量评估集逐题算置信度做 Youden J 阈值扫描,推荐值 ≠ 在用值页上标「该回填」(阈值由校准出,不拍脑袋)。admin 首页新增第六张卡聚合三报表关键数。
+
+```bash
+docker compose up -d      # MySQL + Milvus 三容器
+docker exec -i mewhelp-mysql mysql --default-character-set=utf8mb4 -uroot -proot mewhelp < sql/ch09-ddl.sql
+                          # review_queue / eval_runs 两表 + low_confidence_questions 快照/查重两列(本章环境已应用)
+make langfuse-up          # Langfuse 自部署 v4(观测与成本页数据源)
+uv run pytest             # 单测(305 个;审核 API/观测 API/admin 卡外依全 mock)
+make cost-report          # 意图成本账(需 Langfuse 在跑 + 聊天打过 intent tag 才有数)
+make eval-flywheel        # 评估流水线一轮(重活:全量评估集,需全服务+真实 key)—— 待key
+make calibrate-confidence # 阈值校准(重活,需真实 key)—— 待key
+uv run uvicorn app.main:app --port 8000   # /review 审核页 · /observability 观测页
+```
+
+- **验收入口**:聊天问几个知识库没覆盖的问题 → /review 队列出现带快照的待审件 → 通过并补写标准答案 → 知识库出现「飞轮沉淀」新 Chunk 且可检索、回复不再低置信;驳回件终审不再入审;同一问题再问 `occurrence_count+1` 而非新增待审;/observability 成本账出意图分堆、趋势新轮次在上、校准卡显示选定 vs 在用阈值双竖线。全链路实跑待 key(dev-notes/ch09.md 有逐条命令清单)。
+- **飞轮红线已钉死**(tests/test_review_api.py):先写回成功才改状态(写回炸 502 仍待审)、驳回幂等、已裁决件 409;观测三块互不连坐(tests/test_observability_api.py:写坏半个 json 按「没跑过」、eval_runs 读挂只挂趋势那块);admin 卡在依赖全挂时整卡 unreachable(tests/test_admin_api.py)。
+
 ## 技术栈
 
 - **后端**:Python 3.12、FastAPI、LangChain / LangGraph、SQLAlchemy 2.0(异步)、uv

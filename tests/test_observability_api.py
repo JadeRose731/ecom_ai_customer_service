@@ -95,6 +95,21 @@ async def test_broken_json_treated_as_absent(client, reports):
     assert body["calibration"]["present"] is False
 
 
+async def test_shape_corrupt_json_does_not_crash(client, reports):
+    # ch09 review #5:形状写坏(顶层非 dict / 推荐阈值非数值)同款不许炸——只挂自己那块
+    reports["cost"].write_text("[1, 2, 3]", encoding="utf-8")   # 合法 json 但顶层是数组
+    reports["cal"].write_text(json.dumps(
+        {"recommended_threshold": "很高", "youden_j": None, "distribution": {}, "scan": []},
+        ensure_ascii=False), encoding="utf-8")
+    r = await client.get("/api/observability/overview")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["cost"]["present"] is False                    # 非 dict → 按没跑过
+    assert body["calibration"]["present"] is True
+    assert body["calibration"]["in_sync"] is False             # 非数值推荐 → 判不同步,不抛
+    assert body["trend"]["status"] == "absent"                 # 其余块照常
+
+
 async def test_trend_error_does_not_hurt_others(client, reports, monkeypatch):
     _write(reports["cost"], {"days": 7, "rows": [
         {"intent": "闲聊", "count": 1, "tokens": 9, "avg_tokens": 9, "share": 1.0}]})

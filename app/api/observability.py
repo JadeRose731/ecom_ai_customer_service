@@ -28,7 +28,7 @@ def _load_json(p: Path):
 
 def _cost_block() -> dict:
     data = _load_json(_COST_JSON)
-    if data is None:
+    if not isinstance(data, dict):   # 缺失或形状写坏(顶层非 dict)都按没跑过
         return {"present": False, "job": "cost-report",
                 "hint": "还没跑过按意图成本账(Langfuse 在跑时点右侧「重跑」)"}
     rows = data.get("rows") or []
@@ -41,14 +41,17 @@ def _cost_block() -> dict:
 
 def _cal_block() -> dict:
     data = _load_json(_CAL_JSON)
-    if data is None:
+    if not isinstance(data, dict):
         return {"present": False, "job": "calibrate-confidence",
                 "hint": "还没跑过阈值校准(milvus + 上游可用时点「重跑」,校准完回填在用阈值)"}
     current = settings.evidence_confidence_threshold
     rec = data.get("recommended_threshold")
+    try:
+        in_sync = rec is not None and round(rec, 2) == round(float(current), 2)
+    except (TypeError, ValueError):  # 形状写坏(推荐阈值非数值)——按不同步处理,不炸整页
+        in_sync = False
     return {"present": True, "recommended_threshold": rec, "youden_j": data.get("youden_j"),
-            "current_threshold": current,
-            "in_sync": rec is not None and round(rec, 2) == round(float(current), 2),
+            "current_threshold": current, "in_sync": in_sync,
             "distribution": data.get("distribution") or {},
             "scan": data.get("scan") or []}
 
