@@ -53,6 +53,6 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = ""     # 如 http://localhost:3000(自部署地址,数据不出门)
     # ch09 置信度闸(正式版):阈值由 make calibrate-confidence 在 ch04 评估集上校准后回填,不拍脑袋
-    evidence_confidence_threshold: float = 0.5   # 占位;Task 6 校准后改为实测推荐值
+    evidence_confidence_threshold: float = 0.5   # 占位;校准脚本就绪,实跑待 embed/rerank key(见 ch09 dev-notes 待 key 清单)
 
 settings = Settings()

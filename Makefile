@@ -1,4 +1,4 @@
-.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down
+.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down calibrate-confidence
 
 dev:
 	./scripts/dev.sh
@@ -117,3 +117,7 @@ langfuse-up:
 
 langfuse-down:
 	docker compose -f docker-compose.langfuse.yml down
+
+# ch09:置信度阈值校准(需 milvus + 上游可用 + 知识库已建)
+calibrate-confidence:
+	PYTHONPATH=. uv run python scripts/calibrate_confidence.py
