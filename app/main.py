@@ -15,6 +15,7 @@ from app.api.feedback import router as feedback_router
 from app.api.jobs import router as jobs_router
 from app.api.kb import router as kb_router
 from app.api.admin import router as admin_router
+from app.api.observability import router as observability_router
 from app.api.rageval import router as rageval_router
 from app.api.review import router as review_router
 from app.graph import runtime
@@ -42,6 +43,7 @@ app.include_router(feedback_router)
 app.include_router(kb_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)
+app.include_router(observability_router)
 app.include_router(rageval_router)
 app.include_router(review_router)
 
@@ -68,6 +70,12 @@ async def rageval_page():
 @app.get("/review")
 async def review_page():
     return FileResponse(_STATIC / "review.html")
+
+
+# ch09:观测与成本页(意图成本账/评估趋势/置信度校准三张报表)
+@app.get("/observability")
+async def observability_page():
+    return FileResponse(_STATIC / "observability.html")
 
 
 # ch03:后台共用静态资源挂 /static(页面里引 /static/admin.js 等)。

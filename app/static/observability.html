@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MewHelp · 观测与成本</title>
+<link rel="stylesheet" href="/static/acceptance.css">
+<style>
+  /* 本页三块专用:占比条 / 涨跌箭头 / 阈值扫描图 */
+  .sharebar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #eef0f4; margin: 6px 0 10px; }
+  .sharebar i { display: block; height: 100%; }
+  .delta-up { color: var(--ok); }
+  .delta-down { color: var(--bad); font-weight: 600; }
+  .delta-flat { color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin: 6px 0; }
+  .legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  .scan-wrap { overflow-x: auto; }
+  .blockhint { font-size: 13px; color: var(--muted); padding: 8px 0; }
+  .blockhint.warn { color: var(--warn); }
+</style>
+</head>
+<body class="acceptance">
+<div class="acceptance-wrap">
+  <div data-admin-nav-anchor></div>
+
+  <!-- ① 意图成本账 -->
+  <div class="card">
+    <h2>意图成本账 <span class="hint">按意图把 token 分堆——哪类意图最烧钱立马现形(数据源 Langfuse)</span></h2>
+    <div id="cost-body"></div>
+    <div class="btnrow" style="margin-top:10px">
+      <button class="act" data-job="cost-report">重跑 意图成本账</button>
+      <span class="muted" style="font-size:12px">需 Langfuse 在跑;没数据就先去聊天页聊几句</span>
+    </div>
+    <div class="logwin" data-log="cost-report" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ② 评估趋势 -->
+  <div class="card">
+    <h2>评估趋势 <span class="hint">eval_runs 最近十轮,新在上;任何指标下滑标 ⚠——重点全在这条趋势线上</span></h2>
+    <div id="trend-body"></div>
+    <div class="btnrow" style="margin-top:10px">
+      <button class="act" data-job="eval-flywheel" data-heavy="1">重跑 评估流水线</button>
+      <span class="muted" style="font-size:12px">重活:复用 ch04 全量评估集,调检索+生成+裁判,分钟级</span>
+    </div>
+    <div class="logwin" data-log="eval-flywheel" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ③ 置信度校准 -->
+  <div class="card">
+    <h2>置信度校准 <span class="hint">evidence_confidence 两桶分布 + 阈值扫描(Youden J 选点,不拍脑袋)</span></h2>
+    <div id="cal-body"></div>
+    <div class="btnrow" style="margin-top:10px">
+      <button class="act" data-job="calibrate-confidence" data-heavy="1">重跑 阈值校准</button>
+      <span class="muted" style="font-size:12px">重活:全量评估集逐题算置信度;校准完把推荐值回填 settings</span>
+    </div>
+    <div class="logwin" data-log="calibrate-confidence" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script src="/static/admin.js"></script>
+<script src="/static/acceptance.js"></script>
+<script>
+(function () {
+  'use strict';
+  mountAdminNav('flywheel');
+
+  const METRICS = ['recall_at_10', 'mrr', 'faithfulness', 'refusal_rate'];
+  const METRIC_LABEL = { recall_at_10: 'Recall@10', mrr: 'MRR', faithfulness: '忠实度', refusal_rate: '拒答率' };
+  // 色轮:占比条按行取色(与图例一致)
+  const COLORS = ['#ff7a45', '#3b82f6', '#16a34a', '#d97706', '#8b5cf6', '#0ea5e9', '#e11d48', '#64748b'];
+
+  function esc(s) {
+    const d = document.createElement('div'); d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function hint(msg, warn) {
+    return '<div class="blockhint' + (warn ? ' warn' : '') + '">' + esc(msg) + '</div>';
+  }
+
+  /* ① 成本账 */
+  function renderCost(c) {
+    if (!c.present) return hint(c.hint);
+    if (c.status === 'missing') return hint(c.hint, true);
+    const total = c.rows.reduce((s, r) => s + r.tokens, 0);
+    let html = '<div class="muted" style="font-size:12px">近 ' + c.days + ' 天 · 合计 '
+      + total.toLocaleString() + ' tokens</div><div class="sharebar">';
+    c.rows.forEach((r, i) => {
+      html += '<i style="width:' + (r.share * 100).toFixed(1) + '%;background:' + COLORS[i % COLORS.length]
+        + '" title="' + esc(r.intent) + ' ' + (r.share * 100).toFixed(0) + '%"></i>';
+    });
+    html += '</div><div class="legend">';
+    c.rows.forEach((r, i) => {
+      html += '<span><i style="background:' + COLORS[i % COLORS.length] + '"></i>' + esc(r.intent) + ' '
+        + (r.share * 100).toFixed(0) + '%</span>';
+    });
+    html += '</div><div class="scroll" style="overflow-x:auto"><table class="grid"><thead><tr>'
+      + '<th>意图</th><th>请求数</th><th>总 tokens</th><th>平均 tokens</th><th>占比</th></tr></thead><tbody>';
+    c.rows.forEach((r, i) => {
+      html += '<tr><td>' + esc(r.intent) + (i === 0 ? ' <span class="pill todo">最烧钱</span>' : '')
+        + '</td><td>' + r.count + '</td><td>' + r.tokens.toLocaleString()
+        + '</td><td>' + r.avg_tokens.toLocaleString() + '</td><td>' + (r.share * 100).toFixed(0) + '%</td></tr>';
+    });
+    return html + '</tbody></table></div>';
+  }
+
+  /* ② 趋势:箭头与脚本同口径(±0.005 内算持平) */
+  function delta(v, prev) {
+    if (prev == null || v == null) return '';
+    const d = v - prev;
+    if (d > 0.005) return ' <span class="delta-up">↑</span>';
+    if (d < -0.005) return ' <span class="delta-down">⚠↓</span>';
+    return ' <span class="delta-flat">→</span>';
+  }
+
+  function renderTrend(t) {
+    if (t.status === 'error') return hint(t.hint, true);
+    if (t.status === 'absent') return hint(t.hint);
+    let html = '<div class="scroll" style="overflow-x:auto"><table class="grid"><thead><tr><th>轮次</th><th>时间</th><th>触发</th>'
+      + METRICS.map((m) => '<th>' + METRIC_LABEL[m] + '</th>').join('') + '</tr></thead><tbody>';
+    t.runs.forEach((r, i) => {
+      const prev = i + 1 < t.runs.length ? (t.runs[i + 1].metrics || {}) : null;
+      html += '<tr><td>#' + r.id + '</td><td>' + esc(r.created_at || '—') + '</td><td>' + esc(r.triggered_by) + '</td>';
+      METRICS.forEach((m) => {
+        const v = (r.metrics || {})[m];
+        html += '<td>' + (v == null ? '—' : v.toFixed(3) + delta(v, prev ? prev[m] : null)) + '</td>';
+      });
+      html += '</tr>';
+    });
+    return html + '</tbody></table></div>';
+  }
+
+  /* ③ 校准:分布表 + 阈值扫描双曲线(选定线=推荐,在用线=当前 settings) */
+  function renderCal(c) {
+    if (!c.present) return hint(c.hint);
+    const dist = c.distribution || {};
+    let html = '<table class="grid"><thead><tr><th>桶</th><th>n</th><th>min</th><th>p25</th><th>p50</th><th>p75</th><th>max</th></tr></thead><tbody>';
+    [['answerable', '可答(ABC)'], ['absent', '应拒(D)']].forEach(([k, label]) => {
+      const d = dist[k] || {};
+      html += '<tr><td>' + label + '</td><td>' + (d.n ?? '—') + '</td>'
+        + ['min', 'p25', 'p50', 'p75', 'max'].map((q) => '<td>' + (d[q] != null ? d[q].toFixed(3) : '—') + '</td>').join('') + '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '<div class="muted" style="font-size:12px;margin:8px 0 2px">推荐阈值 '
+      + '<b>' + (c.recommended_threshold != null ? c.recommended_threshold.toFixed(2) : '—') + '</b>'
+      + '(Youden J=' + (c.youden_j != null ? c.youden_j.toFixed(3) : '—') + ') · 在用阈值 '
+      + '<b>' + (c.current_threshold != null ? Number(c.current_threshold).toFixed(2) : '—') + '</b> '
+      + (c.in_sync ? '<span class="pill ok">已同步</span>' : '<span class="pill todo">不一致,该回填</span>') + '</div>';
+    html += '<div class="scan-wrap">' + scanSvg(c) + '</div>';
+    return html;
+  }
+
+  function scanSvg(c) {
+    const scan = c.scan || [];
+    if (!scan.length) return '';
+    const W = 620, H = 190, L = 42, R = 14, T = 12, B = 30;
+    const x = (t) => L + (t - scan[0].t) / (scan[scan.length - 1].t - scan[0].t) * (W - L - R);
+    const y = (v) => T + (1 - v) * (H - T - B);
+    const line = (key) => scan.map((p, i) => (i ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p[key]).toFixed(1)).join(' ');
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;min-width:420px" font-size="11">'
+      + '<rect x="' + L + '" y="' + T + '" width="' + (W - L - R) + '" height="' + (H - T - B) + '" fill="#fafbfd" stroke="#e6e9f0"/>'
+      + '<text x="' + (L - 6) + '" y="' + (y(1) + 4) + '" text-anchor="end" fill="#8a93a6">1.0</text>'
+      + '<text x="' + (L - 6) + '" y="' + (y(0) + 4) + '" text-anchor="end" fill="#8a93a6">0</text>'
+      + '<path d="' + line('tpr') + '" fill="none" stroke="#16a34a" stroke-width="2"/>'
+      + '<path d="' + line('fpr') + '" fill="none" stroke="#d03050" stroke-width="2"/>';
+    [0.2, 0.4, 0.6, 0.8].forEach((t) => {
+      if (t > scan[0].t && t < scan[scan.length - 1].t) {
+        svg += '<text x="' + x(t) + '" y="' + (H - 12) + '" text-anchor="middle" fill="#8a93a6">' + t.toFixed(1) + '</text>';
+      }
+    });
+    svg += '<text x="' + x(scan[scan.length - 1].t) + '" y="' + (H - 12) + '" text-anchor="middle" fill="#8a93a6">'
+      + scan[scan.length - 1].t.toFixed(1) + '</text>';
+    if (c.recommended_threshold != null) {
+      const rx = x(c.recommended_threshold);
+      svg += '<line x1="' + rx + '" y1="' + T + '" x2="' + rx + '" y2="' + (H - B) + '" stroke="#ff7a45" stroke-width="2" stroke-dasharray="4 3"/>'
+        + '<text x="' + (rx + 4) + '" y="' + (T + 10) + '" fill="#ff7a45">选定 ' + c.recommended_threshold.toFixed(2) + '</text>';
+    }
+    if (c.current_threshold != null && c.scan[0].t <= c.current_threshold && c.current_threshold <= scan[scan.length - 1].t) {
+      const cx = x(c.current_threshold);
+      svg += '<line x1="' + cx + '" y1="' + T + '" x2="' + cx + '" y2="' + (H - B) + '" stroke="#64748b" stroke-width="1.5" stroke-dasharray="2 3"/>'
+        + '<text x="' + (cx + 4) + '" y="' + (T + 24) + '" fill="#64748b">在用 ' + Number(c.current_threshold).toFixed(2) + '</text>';
+    }
+    return svg + '</svg>';
+  }
+
+  async function load() {
+    try {
+      const d = await acceptance.api('GET', '/api/observability/overview');
+      document.getElementById('cost-body').innerHTML = renderCost(d.cost);
+      document.getElementById('trend-body').innerHTML = renderTrend(d.trend);
+      document.getElementById('cal-body').innerHTML = renderCal(d.calibration);
+      acceptance.repaintCachedLogs();
+    } catch (e) {
+      acceptance.toast('观测数据加载失败:' + e.message, true);
+    }
+  }
+
+  document.addEventListener('job-done', (e) => {
+    acceptance.toast('作业 ' + e.detail.name + ' 已结束');
+    load();
+  });
+
+  acceptance.bindJob(document);
+  load();
+})();
+</script>
+</body>
+</html>

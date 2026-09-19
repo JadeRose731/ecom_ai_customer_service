@@ -2,7 +2,8 @@
 哪类意图最烧钱立马现形」)。数据源 = Langfuse Metrics API(意图在 Task 3 打成 intent:xxx tag,
 产生模型调用的节点入口各自携带,LangGraph 节点 task 边界下逐节点打标)。
 运行:make cost-report(DAYS=N 窗口天数,默认 7;需 Langfuse 在跑且 .env 配好三变量)。
-产物:dev-notes/ch09-cost-report.txt
+产物:data/ch09/reports/cost_by_intent.{txt,json}(json 给观测页 /observability 读,
+平均 token/占比在脚本里算完写入,页面不再算一遍)
 说明:自定义模型名(glm 系列)在 Langfuse 无内置单价,统计以 token 数为准;
 要看钱在 Langfuse 界面配模型单价即可,不在本脚本范围。
 
@@ -22,7 +23,9 @@ from app.core.intent import INTENTS
 from app.core.observability import get_langfuse
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
-_OUT = _ROOT / "dev-notes/ch09-cost-report.txt"
+_REPORT_DIR = _ROOT / "data/ch09/reports"
+_OUT = _REPORT_DIR / "cost_by_intent.txt"
+_OUT_JSON = _REPORT_DIR / "cost_by_intent.json"
 
 
 def _window(days: int) -> tuple[str, str]:
@@ -109,17 +112,26 @@ def main() -> int:
     rows = sorted(merged.values(), key=lambda r: r["tokens"], reverse=True)
 
     total = sum(r["tokens"] for r in rows) or 1
+    # json 版:数全在脚本里算完(平均 token、占比),观测页只管渲染
+    json_rows = [{"intent": r["intent"], "count": r["count"], "tokens": r["tokens"],
+                  "avg_tokens": r["tokens"] // max(r["count"], 1),
+                  "share": round(r["tokens"] / total, 4)}
+                 for r in rows]
     lines = [f"=== 按意图 token 花销(近 {args.days} 天,数据源 Langfuse)===",
              f"{'意图':6s} {'请求数':>8s} {'总tokens':>12s} {'平均tokens':>12s} {'占比':>7s}"]
-    for i, r in enumerate(rows):
+    for i, r in enumerate(json_rows):
         mark = "  ← 最烧钱" if i == 0 else ""
         lines.append(f"{r['intent']:6s} {r['count']:>8d} {r['tokens']:>12,d} "
-                     f"{r['tokens'] // max(r['count'], 1):>12,d} {r['tokens'] / total:>6.0%}{mark}")
-    if not rows:
+                     f"{r['avg_tokens']:>12,d} {r['share']:>6.0%}{mark}")
+    if not json_rows:
         lines.append("(窗口内没有带 intent tag 的 generation——先聊几句再来)")
     out = "\n".join(lines)
     print(out)
+    _REPORT_DIR.mkdir(parents=True, exist_ok=True)
     _OUT.write_text(out + "\n", encoding="utf-8")
+    _OUT_JSON.write_text(json.dumps(
+        {"days": args.days, "from": frm, "to": to, "rows": json_rows},
+        ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"\n报告已落 {_OUT.relative_to(_ROOT)}")
     return 0
 

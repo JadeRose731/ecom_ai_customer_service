@@ -11,6 +11,12 @@ async def test_admin_page_reachable_and_mounts_nav(client):
     assert "/static/admin.js" in r.text
 
 
+async def test_observability_page_reachable_and_mounts_nav(client):
+    r = await client.get("/observability")
+    assert r.status_code == 200
+    assert "/static/admin.js" in r.text and "/static/acceptance.js" in r.text
+
+
 async def test_index_has_admin_entry(client):
     r = await client.get("/")
     assert r.status_code == 200

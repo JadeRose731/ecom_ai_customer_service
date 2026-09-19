@@ -3,7 +3,7 @@
 运行:make eval-flywheel(TRIGGER=手动|定时,默认手动)。cron 示例:
   0 6 * * * cd /path/to/mewhelp && make eval-flywheel TRIGGER=定时 >> log/eval.log 2>&1
 趋势:读最近 10 轮,对比上一轮涨跌;任何指标下滑标 ⚠——README:「重点全在这条趋势线上」。
-产物:dev-notes/ch09-eval-trend.txt
+产物:data/ch09/reports/eval_trend.txt(趋势不落 json:eval_runs 表是权威源,页面直接读表)
 
 实现注(偏差⑥,dev-notes 有全记录):Plan import 的 _format_evidence/_hit_rank/_retrieve/
 _refusal_one/_mean 在 eval_ch04 里并不存在,按现树真实形状复用:_evidence_text / _group_rank
@@ -25,7 +25,8 @@ from scripts.eval_ch04 import (
 )
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
-_OUT = _ROOT / "dev-notes/ch09-eval-trend.txt"
+_REPORT_DIR = _ROOT / "data/ch09/reports"
+_OUT = _REPORT_DIR / "eval_trend.txt"
 _LINES: list[str] = []
 
 
@@ -143,6 +144,7 @@ async def main():
          f"Faithfulness={m['faithfulness']:.3f} 拒答率={m['refusal_rate']:.3f}")
     await repository.insert_eval_run(args.triggered_by, result["dataset_size"], m)
     _trend(await repository.list_eval_runs(limit=10))
+    _REPORT_DIR.mkdir(parents=True, exist_ok=True)
     _OUT.write_text("\n".join(_LINES) + "\n", encoding="utf-8")
     _log(f"\n趋势报告已落 {_OUT.relative_to(_ROOT)}")
 

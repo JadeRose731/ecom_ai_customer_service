@@ -29,6 +29,10 @@ JOBS: dict[str, JobSpec] = {
         JobSpec("kb-reset", "kb-reset", heavy=True),
         JobSpec("seed-conv", "seed-conv"),
         JobSpec("eval-rag", "eval-rag", heavy=True),   # ch04:四策略评估,分钟级重活
+        # ch09:观测与成本页三作业(成本账需 Langfuse 在跑;后两个 minutes 级重活)
+        JobSpec("cost-report", "cost-report"),
+        JobSpec("eval-flywheel", "eval-flywheel", heavy=True),
+        JobSpec("calibrate-confidence", "calibrate-confidence", heavy=True),
     )
 }
 
