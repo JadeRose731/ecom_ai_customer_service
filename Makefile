@@ -147,3 +147,6 @@ ch10-corpus: ch10-golden  ## 语料流水线:捞池→清洗→预标→模拟�
 
 ch10-dataset:  ## 分层划分 80/10/10 + 训练集增强(需上游可用)
 	PYTHONPATH=. uv run python scripts/ch10/build_dataset.py
+
+ch10-train:  ## RoBERTa-wwm-ext 全参微调(MPS/CUDA/CPU 自适应,重依赖走 ml 组)
+	PYTHONPATH=. uv run --group ml python scripts/ch10/train.py
