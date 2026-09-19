@@ -1,4 +1,4 @@
-.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07
+.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down
 
 dev:
 	./scripts/dev.sh
@@ -105,3 +105,15 @@ mcp-down:
 # ch08:验收样例端到端(需 make dev 全服务 + mcp-up)
 eval-ch08:
 	PYTHONPATH=. uv run python scripts/eval_ch08.py
+
+# ch09: Langfuse 自部署观测栈(web:3000 + worker + postgres + clickhouse + redis + minio)
+langfuse-up:
+	docker compose -f docker-compose.langfuse.yml up -d
+	@echo "Langfuse 起中: http://localhost:3000 (admin@mewhelp.local / mewhelp123)"
+	@echo "首次就绪约 2-3 分钟;key 已 headless 预置,写 .env:"
+	@echo "  LANGFUSE_PUBLIC_KEY=pk-lf-mewhelp-local"
+	@echo "  LANGFUSE_SECRET_KEY=sk-lf-mewhelp-local"
+	@echo "  LANGFUSE_BASE_URL=http://localhost:3000"
+
+langfuse-down:
+	docker compose -f docker-compose.langfuse.yml down

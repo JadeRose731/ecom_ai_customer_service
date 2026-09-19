@@ -9,6 +9,7 @@ from langgraph.types import Command
 from app.config import settings
 from app.core import summarizer
 from app.db import repository
+from app.core.observability import attach_observability
 from app.graph.build import build_graph
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ async def init_graph() -> None:
     _cm = AsyncSqliteSaver.from_conn_string(settings.checkpointer_db_path)
     checkpointer = await _cm.__aenter__()
     await checkpointer.setup()
-    _graph = build_graph(checkpointer=checkpointer)
+    _graph = attach_observability(build_graph(checkpointer=checkpointer))
     logger.info("ch05 图已编译,checkpointer=%s", settings.checkpointer_db_path)
 
 
@@ -108,7 +109,9 @@ async def run_turn(user_id, message, conversation_id) -> dict:
     """非流式:落 user 消息 → ainvoke → 返回终态(供 /api/agent、eval)。"""
     cid, summary, upto = await _ensure_conversation(user_id, conversation_id)
     msg_id = await repository.append_message(cid, "user", content=message)
-    config = {"configurable": {"thread_id": str(cid)}}
+    # ch09:metadata 带 langfuse_session_id,trace 归到会话(langfuse 未启用时多余无害)
+    config = {"configurable": {"thread_id": str(cid)},
+              "metadata": {"langfuse_session_id": str(cid)}}
     final = await get_graph().ainvoke(
         _graph_input(user_id, message, cid, msg_id, summary, upto), config)
     await summarizer.maybe_schedule_summary(cid)     # 轮后触发检查(后台,不阻塞返回)
@@ -119,7 +122,8 @@ async def resume_turn(conversation_id: int, resume_value) -> dict:
     """非流式续跑(供 /api/agent、eval):Command(resume) 回填后跑到下一个中断或结束。"""
     if await repository.get_conversation(conversation_id) is None:
         raise ConversationNotFound(conversation_id)
-    config = {"configurable": {"thread_id": str(conversation_id)}}
+    config = {"configurable": {"thread_id": str(conversation_id)},
+              "metadata": {"langfuse_session_id": str(conversation_id)}}
     final = await get_graph().ainvoke(Command(resume=resume_value), config)
     await summarizer.maybe_schedule_summary(conversation_id)
     return {"conversation_id": conversation_id, "state": final,
@@ -147,7 +151,8 @@ async def stream_resume(conversation_id: int, resume_value) -> AsyncIterator[dic
 
 
 async def _stream_events(cid: int, stream_source) -> AsyncIterator[dict]:
-    config = {"configurable": {"thread_id": str(cid)}}
+    config = {"configurable": {"thread_id": str(cid)},
+              "metadata": {"langfuse_session_id": str(cid)}}
     actions: list = []
     async for mode, chunk in get_graph().astream(
         stream_source, config, stream_mode=["messages", "updates"],
