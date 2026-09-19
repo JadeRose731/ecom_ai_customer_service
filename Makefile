@@ -153,3 +153,6 @@ ch10-train:  ## RoBERTa-wwm-ext 全参微调(MPS/CUDA/CPU 自适应,重依赖走
 
 ch10-eval:  ## 测试集评测:每类 P/R/F1 + 混淆矩阵 + 容错红线 + 判错样本导出
 	PYTHONPATH=. uv run --group ml python scripts/ch10/evaluate.py
+
+ch10-export:  ## 导出 ONNX 并校验与 torch 预测完全一致
+	PYTHONPATH=. uv run --group ml python scripts/ch10/export_onnx.py
