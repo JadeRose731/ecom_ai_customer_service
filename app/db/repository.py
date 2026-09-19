@@ -6,7 +6,7 @@ from sqlalchemy import case, delete, func, select, update
 import app.db.base as db          # 用模块属性引用,便于测试 monkeypatch async_session
 from app.db.models import (
     Conversation, EvalRun, Faq, FaithCase, KnowledgeChunk, LowConfidenceQuestion, Message,
-    QaExtractionStaging, ReviewQueue, Ticket, ToolAuditLog,
+    QaExtractionStaging, ReviewQueue, Ticket, ToolAuditLog, TopicClassification,
 )
 
 _TICKET_SEQ = 0
@@ -530,3 +530,80 @@ async def insert_tool_audit(
             error_message=error_message, retry_count=retry_count, duration_ms=duration_ms,
         ))
         await s.commit()
+
+
+# ---------- ch10 主题分类 ----------
+
+def _pool_text_stmt():
+    """池问题取文本的公共查询:优先归并后的标准化问法,没归并退回原话。"""
+    return (
+        select(LowConfidenceQuestion.id, LowConfidenceQuestion.raw_question,
+               ReviewQueue.normalized_question)
+        .outerjoin(ReviewQueue, LowConfidenceQuestion.matched_review_id == ReviewQueue.id)
+        .order_by(LowConfidenceQuestion.id)
+    )
+
+
+async def list_pool_texts() -> list[dict]:
+    """ch10 训练语料捞取:全量低置信度问题。"""
+    async with db.async_session() as s:
+        rows = (await s.execute(_pool_text_stmt())).all()
+    return [{"question_id": qid, "text": norm or raw} for qid, raw, norm in rows]
+
+
+async def list_unclassified_questions(limit: int = 500) -> list[dict]:
+    """ch10 旁路批处理捞取:尚未归类、且已归并的低置信度问题。
+    只归有 matched_review_id 的问题——分类器只吃归并阶段产出的标准化问法,
+    未归并的留到下一轮归并后再归,不喂原话。"""
+    stmt = (
+        _pool_text_stmt()
+        .outerjoin(TopicClassification,
+                   TopicClassification.question_id == LowConfidenceQuestion.id)
+        .where(TopicClassification.id.is_(None))
+        .where(LowConfidenceQuestion.matched_review_id.is_not(None))
+        .limit(limit)
+    )
+    async with db.async_session() as s:
+        rows = (await s.execute(stmt)).all()
+    return [{"question_id": qid, "text": norm or raw} for qid, raw, norm in rows]
+
+
+async def insert_topic_classifications(rows: list[dict]) -> int:
+    """批量写归类结果;rows: [{question_id, labels}]。"""
+    async with db.async_session() as s:
+        s.add_all([TopicClassification(question_id=r["question_id"], labels=r["labels"])
+                   for r in rows])
+        await s.commit()
+    return len(rows)
+
+
+async def topic_distribution(samples_per_class: int = 3) -> dict:
+    """主题分布:17 类各自问题量 + 每类样例;labels JSON 在 Python 侧聚合(量级小)。"""
+    from app.core.taxonomy import TOPIC_NAMES
+
+    stmt = (
+        select(TopicClassification.labels, LowConfidenceQuestion.raw_question,
+               ReviewQueue.normalized_question, TopicClassification.classified_at)
+        .join(LowConfidenceQuestion,
+              TopicClassification.question_id == LowConfidenceQuestion.id)
+        .outerjoin(ReviewQueue, LowConfidenceQuestion.matched_review_id == ReviewQueue.id)
+    )
+    async with db.async_session() as s:
+        rows = (await s.execute(stmt)).all()
+    counts = {name: 0 for name in TOPIC_NAMES}
+    samples: dict[str, list[str]] = {name: [] for name in TOPIC_NAMES}
+    latest = None
+    for labels, raw, norm, ts in rows:
+        text = norm or raw
+        latest = ts if latest is None or ts > latest else latest
+        for lb in labels or []:
+            if lb in counts:
+                counts[lb] += 1
+                if len(samples[lb]) < samples_per_class:
+                    samples[lb].append(text)
+    return {
+        "total": len(rows),
+        "latest": latest.isoformat() if latest else None,
+        "classes": [{"label": n, "count": counts[n], "samples": samples[n]}
+                    for n in TOPIC_NAMES],
+    }

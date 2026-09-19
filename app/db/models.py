@@ -192,3 +192,14 @@ class EvalRun(Base):
     dataset_size: Mapped[int] = mapped_column(Integer)
     metrics: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class TopicClassification(Base):
+    """ch10 主题分类结果:旁路批量归类,一行 = 一条问题的一次归类;labels 存命中类目名数组。"""
+    __tablename__ = "topic_classifications"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    question_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("low_confidence_questions.id"))
+    labels: Mapped[list] = mapped_column(JSON)
+    classified_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
