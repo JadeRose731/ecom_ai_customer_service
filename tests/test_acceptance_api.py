@@ -84,6 +84,19 @@ async def test_eval_missing_reports(client):
     assert body["threshold_in_use"] is None
 
 
+async def test_overview_with_model_files_sizes_human_readable(client, tmp_path):
+    """回归:训练三件套齐时 train 闸要算总大小——产物一直缺失时这分支从没跑过,曾因笔误 500。"""
+    m = tmp_path / "model"
+    m.mkdir()
+    for name in ("model.safetensors", "tokenizer.json", "threshold.json"):
+        (m / name).write_text("x" * 100, encoding="utf-8")
+    r = await client.get("/api/acceptance/overview")
+    assert r.status_code == 200
+    train = next(b for b in r.json()["blocks"] if b["key"] == "train")
+    assert train["status"] == "pass"
+    assert "300 B" in train["headline"]
+
+
 async def test_corrupt_report_reads_as_missing_not_500(client, tmp_path):
     """作业被页面 stop 掐在写一半时,产物 json 可能是残的——按没跑过处理,不炸页面。"""
     (tmp_path / "reports").mkdir()

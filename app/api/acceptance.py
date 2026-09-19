@@ -134,7 +134,7 @@ async def overview():
          "jobs": ["ch10-dataset"]},
         {"key": "train", "no": 4, "title": "训练三件套", "page": "/acceptance/data",
          "status": gate(len(model_files) == 3, True),
-         "headline": (f"权重+tokenizer+阈值齐({_asnb(sum(f['bytes'] for f in model_files))})"
+         "headline": (f"权重+tokenizer+阈值齐({_asynb(sum(f['bytes'] for f in model_files))})"
                       if len(model_files) == 3 else "还没训出模型"),
          "note": "" if len(model_files) == 3 else "还没跑过——点按钮或终端 make ch10-train",
          "jobs": ["ch10-train"]},
@@ -148,7 +148,7 @@ async def overview():
         {"key": "export", "no": 6, "title": "ONNX 导出一致", "page": "/acceptance/eval",
          "status": gate(export_r["present"], export_r.get("passed")),
          "headline": (f"{export_r['checked']} 条校验,不一致 {export_r['mismatch']} 条,"
-                      f"文件 {_asnb(export_r.get('onnx_bytes', 0))}"
+                      f"文件 {_asynb(export_r.get('onnx_bytes', 0))}"
                       if export_r["present"] else "还没导出"),
          "note": "" if export_r["present"] else export_r["hint"],
          "jobs": ["ch10-export"]},

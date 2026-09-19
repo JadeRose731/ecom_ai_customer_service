@@ -1,0 +1,313 @@
+{
+  "ran_at": "2026-09-19T23:07:11",
+  "test_size": 135,
+  "threshold": 0.3,
+  "red_lines": {
+    "严": 0.8,
+    "中": 0.6
+  },
+  "micro": {
+    "p": 1.0,
+    "r": 0.98,
+    "f1": 0.9899
+  },
+  "macro": {
+    "p": 1.0,
+    "r": 0.9799,
+    "f1": 0.9894
+  },
+  "classes": [
+    {
+      "name": "退换货",
+      "severity": "严",
+      "p": 1.0,
+      "r": 0.875,
+      "f1": 0.9333,
+      "support": 8,
+      "red_line": 0.8,
+      "passed": true,
+      "tn": 127,
+      "fp": 0,
+      "fn": 1,
+      "tp": 7
+    },
+    {
+      "name": "物流",
+      "severity": "严",
+      "p": 1.0,
+      "r": 0.9091,
+      "f1": 0.9524,
+      "support": 11,
+      "red_line": 0.8,
+      "passed": true,
+      "tn": 124,
+      "fp": 0,
+      "fn": 1,
+      "tp": 10
+    },
+    {
+      "name": "尺码",
+      "severity": "严",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 9,
+      "red_line": 0.8,
+      "passed": true,
+      "tn": 126,
+      "fp": 0,
+      "fn": 0,
+      "tp": 9
+    },
+    {
+      "name": "发票",
+      "severity": "严",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 8,
+      "red_line": 0.8,
+      "passed": true,
+      "tn": 127,
+      "fp": 0,
+      "fn": 0,
+      "tp": 8
+    },
+    {
+      "name": "质量问题",
+      "severity": "严",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 11,
+      "red_line": 0.8,
+      "passed": true,
+      "tn": 124,
+      "fp": 0,
+      "fn": 0,
+      "tp": 11
+    },
+    {
+      "name": "运费",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 8,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 127,
+      "fp": 0,
+      "fn": 0,
+      "tp": 8
+    },
+    {
+      "name": "优惠活动",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 9,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 126,
+      "fp": 0,
+      "fn": 0,
+      "tp": 9
+    },
+    {
+      "name": "价保",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 8,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 127,
+      "fp": 0,
+      "fn": 0,
+      "tp": 8
+    },
+    {
+      "name": "支付",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 7,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 128,
+      "fp": 0,
+      "fn": 0,
+      "tp": 7
+    },
+    {
+      "name": "订单修改",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 9,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 126,
+      "fp": 0,
+      "fn": 0,
+      "tp": 9
+    },
+    {
+      "name": "库存补货",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 9,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 126,
+      "fp": 0,
+      "fn": 0,
+      "tp": 9
+    },
+    {
+      "name": "商品信息",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 10,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 125,
+      "fp": 0,
+      "fn": 0,
+      "tp": 10
+    },
+    {
+      "name": "保修维修",
+      "severity": "中",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 10,
+      "red_line": 0.6,
+      "passed": true,
+      "tn": 125,
+      "fp": 0,
+      "fn": 0,
+      "tp": 10
+    },
+    {
+      "name": "账号",
+      "severity": "宽",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 8,
+      "red_line": null,
+      "passed": null,
+      "tn": 127,
+      "fp": 0,
+      "fn": 0,
+      "tp": 8
+    },
+    {
+      "name": "会员积分",
+      "severity": "宽",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 9,
+      "red_line": null,
+      "passed": null,
+      "tn": 126,
+      "fp": 0,
+      "fn": 0,
+      "tp": 9
+    },
+    {
+      "name": "评价",
+      "severity": "宽",
+      "p": 1.0,
+      "r": 0.875,
+      "f1": 0.9333,
+      "support": 8,
+      "red_line": null,
+      "passed": null,
+      "tn": 127,
+      "fp": 0,
+      "fn": 1,
+      "tp": 7
+    },
+    {
+      "name": "其他",
+      "severity": "宽",
+      "p": 1.0,
+      "r": 1.0,
+      "f1": 1.0,
+      "support": 8,
+      "red_line": null,
+      "passed": null,
+      "tn": 127,
+      "fp": 0,
+      "fn": 0,
+      "tp": 8
+    }
+  ],
+  "errors": [
+    {
+      "text": "晒单返券的活动怎么参加",
+      "gold": [
+        "评价",
+        "优惠活动"
+      ],
+      "pred": [
+        "优惠活动"
+      ],
+      "missed": [
+        "评价"
+      ],
+      "extra": [],
+      "kind": "漏打",
+      "matrix_entries": 1
+    },
+    {
+      "text": "运费谁出啊快递还卡在半路",
+      "gold": [
+        "运费",
+        "物流"
+      ],
+      "pred": [
+        "运费"
+      ],
+      "missed": [
+        "物流"
+      ],
+      "extra": [],
+      "kind": "漏打",
+      "matrix_entries": 1
+    },
+    {
+      "text": "退了这单我的优惠券还回来吗",
+      "gold": [
+        "退换货",
+        "优惠活动"
+      ],
+      "pred": [
+        "优惠活动"
+      ],
+      "missed": [
+        "退换货"
+      ],
+      "extra": [],
+      "kind": "漏打",
+      "matrix_entries": 1
+    }
+  ],
+  "total_cells": 3,
+  "total_fp": 0,
+  "total_fn": 3,
+  "red_line_passed": true
+}

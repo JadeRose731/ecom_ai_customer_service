@@ -2,6 +2,7 @@
 增强只扩训练集——验证/测试是考题,不许照练习题变。运行:make ch10-dataset(需上游可用)。"""
 import asyncio
 import json
+import os
 import pathlib
 import sys
 
@@ -54,7 +55,10 @@ async def main() -> None:
         sys.stdout.reconfigure(errors="replace")
     samples = [json.loads(l) for l in SRC.read_text(encoding="utf-8").splitlines() if l.strip()]
     train, val, test = split_dataset(samples)
-    aug = await augment(train)
+    if os.environ.get("CH10_NO_AUG") == "1":
+        aug = []   # 离线代跑(CH10_NO_AUG=1):同义句增强要 LLM,上游挂时逐条重试会卡几小时,直接跳过
+    else:
+        aug = await augment(train)
     aug = dedupe(aug)                        # 变体之间也去重
     seen = {s["text"] for s in samples}      # 变体撞上任何原句(含考题)就丢弃
     train = train + [a for a in aug if a["text"] not in seen]
