@@ -9,3 +9,7 @@ data/mcp-*.pid
 data/volumes/
 log/
 data/ch04/reports/
+
+# ch10 训练/推理产物不进 git,验收报告除外
+data/ch10/*
+!data/ch10/reports/
