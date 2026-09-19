@@ -1,4 +1,4 @@
-.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down calibrate-confidence
+.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down calibrate-confidence flywheel flywheel-samples
 
 dev:
 	./scripts/dev.sh
@@ -121,3 +121,11 @@ langfuse-down:
 # ch09:置信度阈值校准(需 milvus + 上游可用 + 知识库已建)
 calibrate-confidence:
 	PYTHONPATH=. uv run python scripts/calibrate_confidence.py
+
+# ch09:飞轮批处理:问题池 → 标准化查重 → 待审队列(需 mysql + 上游可用)
+flywheel:
+	PYTHONPATH=. uv run python scripts/flywheel_pipeline.py
+
+# ch09:标准化查重 prompt 标注样例验证(通过率 ≥ 80%,需上游可用)
+flywheel-samples:
+	PYTHONPATH=. uv run python scripts/validate_flywheel_samples.py

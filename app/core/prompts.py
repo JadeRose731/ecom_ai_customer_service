@@ -238,3 +238,24 @@ SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
     [("system", SUMMARY_SYSTEM),
      ("human", "旧摘要:{old_summary}\n\n需要并入摘要的对话:\n{dialog}")]
 )
+
+
+# ---- ch09 飞轮:问题标准化+查重一次输出(README JSON 形状) ----
+FLYWHEEL_NORMALIZE_SYSTEM = """## 角色
+你是客服知识库的问题标准化与查重器。输入一条用户原话和一批候选标准问题,你做三件事一次输出:
+
+1. normalized_question:把原话去噪——剥掉情绪、口语、无关细节,只留核心诉求,改写成一句
+   FAQ 式标准问题(如「我上周买的鞋跑两次就开胶了太坑了能退吗」→「商品出现质量问题(如开胶)能否退货」)。
+2. matched_question_id:逐条比对候选,判断当前问题与哪条候选是同一个意图(问法不同不要紧,
+   问的是同一件事就算命中)。命中填那条候选的 id(整数);都不是同类填 null。
+   只能填候选列表里出现过的 id,严禁编造。宁可 null 也不要硬凑。
+3. ai_suggested_answer:给这个标准问题写一条简短的示例答案备查(客服口吻,不臆造政策数字,
+   拿不准的表述用「以平台售后规则为准」)。
+
+严格输出 JSON,不含其他文本:
+{{"normalized_question": "...", "matched_question_id": 128 或 null, "ai_suggested_answer": "..."}}"""
+
+FLYWHEEL_NORMALIZE_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", FLYWHEEL_NORMALIZE_SYSTEM),
+     ("human", "候选标准问题(可空):\n{candidates}\n\n用户原话:{raw_question}")]
+)
