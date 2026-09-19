@@ -7,6 +7,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.types import interrupt
 
 from app.config import settings
+from app.core.observability import tag_intent
 from app.core import coref, memory
 from app.core import intent as intent_mod
 from app.core import query_understanding, retrieval, selfcheck
@@ -94,6 +95,7 @@ async def classify_intent(state) -> dict:
     r = await intent_mod.classify(query, _history_text(state))
     intent, conf = r["intent"], r["confidence"]
     route = INTENT_TO_ROUTE.get(intent, "business")
+    tag_intent(intent, conf, session_id=state.get("conversation_id"))   # ch09:意图进 trace,Cost Control 按意图分堆
     return {"intent": intent, "intent_confidence": conf, "route": route,
             "trace": {"intent": intent, "intent_confidence": conf, "route": route}}
 
@@ -259,6 +261,8 @@ def _log_model_context(state, msgs) -> None:
 
 async def agent_llm(state, config=None) -> dict:
     """ReAct 推理步:调模型(带工具),累加 steps 与 token 消耗。"""
+    tag_intent(state.get("intent", "其他"), state.get("intent_confidence", 0.0),
+               session_id=state.get("conversation_id"))   # ch09:本节点 LLM span 按 intent 分组(节点 task 边界,见 dev-notes)
     msgs = _agent_messages(state)
     _log_model_context(state, msgs)   # ch07:拼装结果进日志,验收可观测
     # ch08:全量清单现问现拿(bind),MCP 新工具下一轮即可见
