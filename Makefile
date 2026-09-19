@@ -137,3 +137,7 @@ eval-flywheel:
 # ch09:按意图 token 账(需 Langfuse 在跑;DAYS=窗口天数,默认 7)
 cost-report:
 	PYTHONPATH=. uv run python scripts/cost_by_intent.py --days $(or $(DAYS),7)
+
+# ch10: 主题分类器(数据→训练→评测→ONNX→旁路批量归类)
+ch10-golden:  ## 预标 prompt 黄金样例验证(通过率 ≥ 80% 才放行批量预标,需上游可用)
+	PYTHONPATH=. uv run python scripts/ch10/validate_golden.py
