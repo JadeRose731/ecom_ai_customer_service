@@ -1,4 +1,4 @@
-.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down calibrate-confidence flywheel flywheel-samples eval-flywheel
+.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down calibrate-confidence flywheel flywheel-samples eval-flywheel cost-report
 
 dev:
 	./scripts/dev.sh
@@ -133,3 +133,7 @@ flywheel-samples:
 # ch09:评估流水线:复用 ch04 评估集,落 eval_runs 连趋势(TRIGGER=手动|定时,需全上游可用)
 eval-flywheel:
 	PYTHONPATH=. uv run python scripts/eval_flywheel.py --triggered-by $(or $(TRIGGER),手动)
+
+# ch09:按意图 token 账(需 Langfuse 在跑;DAYS=窗口天数,默认 7)
+cost-report:
+	PYTHONPATH=. uv run python scripts/cost_by_intent.py --days $(or $(DAYS),7)
