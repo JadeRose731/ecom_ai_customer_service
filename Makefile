@@ -144,3 +144,6 @@ ch10-golden:  ## 预标 prompt 黄金样例验证(通过率 ≥ 80% 才放行批
 
 ch10-corpus: ch10-golden  ## 语料流水线:捞池→清洗→预标→模拟补足→抽审导出(依赖验证闸过线;需上游可用)
 	PYTHONPATH=. uv run python scripts/ch10/build_corpus.py
+
+ch10-dataset:  ## 分层划分 80/10/10 + 训练集增强(需上游可用)
+	PYTHONPATH=. uv run python scripts/ch10/build_dataset.py
