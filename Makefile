@@ -1,4 +1,4 @@
-.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down calibrate-confidence flywheel flywheel-samples
+.PHONY: mcp-up mcp-down dev test eval seed eval-agent kb-preview kb-build kb-vectorize kb-mine kb-reset eval-retrieval seed-conv eval-mining milvus-up milvus-down smoke-rag eval-rag eval-check dev-vectors judge-check eval-rewrite eval-ch05 smoke-interrupt eval-ch06 eval-ch07 langfuse-up langfuse-down calibrate-confidence flywheel flywheel-samples eval-flywheel
 
 dev:
 	./scripts/dev.sh
@@ -129,3 +129,7 @@ flywheel:
 # ch09:标准化查重 prompt 标注样例验证(通过率 ≥ 80%,需上游可用)
 flywheel-samples:
 	PYTHONPATH=. uv run python scripts/validate_flywheel_samples.py
+
+# ch09:评估流水线:复用 ch04 评估集,落 eval_runs 连趋势(TRIGGER=手动|定时,需全上游可用)
+eval-flywheel:
+	PYTHONPATH=. uv run python scripts/eval_flywheel.py --triggered-by $(or $(TRIGGER),手动)
