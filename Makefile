@@ -150,3 +150,6 @@ ch10-dataset:  ## 分层划分 80/10/10 + 训练集增强(需上游可用)
 
 ch10-train:  ## RoBERTa-wwm-ext 全参微调(MPS/CUDA/CPU 自适应,重依赖走 ml 组)
 	PYTHONPATH=. uv run --group ml python scripts/ch10/train.py
+
+ch10-eval:  ## 测试集评测:每类 P/R/F1 + 混淆矩阵 + 容错红线 + 判错样本导出
+	PYTHONPATH=. uv run --group ml python scripts/ch10/evaluate.py
