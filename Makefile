@@ -165,3 +165,6 @@ classifier-up:  ## ch10 推理服务 :8110(ONNX 轻运行时)
 classifier-down:
 	-@kill `cat data/classifier.pid 2>/dev/null` 2>/dev/null; rm -f data/classifier.pid
 	@echo "分类器服务已停"
+
+classify-pool:  ## ch10 旁路批量归类:攒够一批归一次,写 topic_classifications(需 :8110)
+	PYTHONPATH=. uv run python scripts/ch10/classify_pool.py
