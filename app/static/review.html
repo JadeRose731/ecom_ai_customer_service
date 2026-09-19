@@ -1,10 +1,364 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<title>MewHelp 审核后台</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MewHelp · 飞轮待审队列</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2430; --muted: #8a93a6;
+    --brand: #ff7a45; --brand-soft: #fff1ea; --line: #e6e9f0;
+    --blue: #3b82f6; --amber: #d97706; --red: #d03050; --green: #16a34a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  .wrap { max-width: 1080px; margin: 24px auto; padding: 0 16px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  header .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); color: #fff;
+                 display: grid; place-items: center; font-size: 18px; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header select { margin-left: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+                  font: inherit; background: #fff; cursor: pointer; outline: none; }
+  header select:focus { border-color: var(--brand); }
+  header button { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px;
+                  border-radius: 8px; cursor: pointer; font-size: 13px; }
+  header button:hover { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+  /* 三道闸提示条(README 审核要点) */
+  .gates { background: var(--brand-soft); border: 1px solid #ffd6c2; border-radius: 12px;
+           padding: 10px 14px; font-size: 13px; color: #9a4b1f; margin-bottom: 12px; }
+  .gates b { color: var(--brand); }
+  /* 队列表格 */
+  .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+                overflow: hidden; box-shadow: 0 6px 30px rgba(31,36,48,.06); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; background: #fafbfd; }
+  tbody tr.item { cursor: pointer; }
+  tbody tr.item:hover { background: var(--brand-soft); }
+  tbody tr.item.open { background: var(--brand-soft); }
+  td.q { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+  td.ans { max-width: 260px; overflow: hidden; text-overflow: ellipsis; color: #4b5563; }
+  .freq { display: inline-block; min-width: 26px; text-align: center; border-radius: 999px;
+          padding: 0 8px; font-size: 12px; background: #f3f4f6; color: #6b7280; }
+  .freq.hot { background: var(--brand-soft); color: var(--brand); border: 1px solid var(--brand); font-weight: 600; }
+  .st { font-size: 12px; border-radius: 999px; padding: 1px 10px; }
+  .st.待审 { color: var(--amber); background: #fef3c7; }
+  .st.通过 { color: var(--green); background: #dcfce7; }
+  .st.驳回 { color: var(--muted); background: #f3f4f6; }
+  td.ops { white-space: nowrap; }
+  .op { border: 1px solid var(--brand); background: #fff; color: var(--brand); border-radius: 8px;
+        padding: 4px 12px; cursor: pointer; font-size: 12px; margin-right: 6px; }
+  .op:hover { background: var(--brand-soft); }
+  .op.warn { border-color: var(--line); color: var(--muted); }
+  .op.warn:hover { background: #f3f4f6; color: var(--ink); }
+  .op:disabled { border-color: var(--line); color: #c2c8d4; background: #f3f4f6; cursor: not-allowed; }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+  /* 行详情展开 */
+  tr.detail td { background: #fafbfd; white-space: normal; }
+  .detail-inner { padding: 6px 4px 14px; }
+  .detail-hint { font-size: 12px; color: var(--brand); margin-bottom: 10px; }
+  .raw { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .raw-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .src { font-size: 11px; border-radius: 999px; padding: 0 9px; color: #fff; }
+  .src.retrieval_low_conf { background: var(--blue); }
+  .src.self_check { background: var(--amber); }
+  .src.user_feedback { background: var(--red); }
+  .raw-time { font-size: 12px; color: var(--muted); }
+  .raw-reason { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .snaps { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .snap { border: 1px dashed #c7ccd6; border-radius: 8px; padding: 8px 10px; font-size: 12px; background: #fcfcfd; }
+  .snap .sq { font-weight: 600; margin-bottom: 2px; }
+  .snap .sa { color: #4b5563; white-space: pre-wrap; }
+  .score-bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .bar { flex: 0 0 140px; height: 6px; border-radius: 3px; background: #eef0f4; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--brand); border-radius: 3px; }
+  .score-num { color: var(--brand); font-weight: 600; }
+  .snap-path { color: var(--muted); margin-top: 2px; }
+  .no-snap { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  /* 通过弹框 */
+  #approve-mask { position: fixed; inset: 0; background: rgba(31,36,48,.4); display: none;
+                  z-index: 100; align-items: center; justify-content: center; }
+  #approve-mask.show { display: flex; }
+  #approve-modal { width: min(460px, 92vw); background: #fff; border-radius: 14px; padding: 18px;
+                   box-shadow: 0 12px 40px rgba(31,36,48,.2); }
+  #approve-modal h3 { font-size: 15px; margin-bottom: 4px; }
+  #approve-modal .q { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  #approve-modal label { display: block; font-size: 13px; margin: 10px 0 4px; }
+  #approve-modal textarea { width: 100%; height: 110px; border: 1px solid var(--line); border-radius: 8px;
+                            padding: 8px 10px; font: inherit; outline: none; resize: vertical; }
+  #approve-modal textarea:focus { border-color: var(--brand); }
+  #approve-modal .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  #approve-modal .btns button { border-radius: 8px; padding: 7px 16px; cursor: pointer; font-size: 13px;
+                                border: 1px solid var(--line); background: #fff; }
+  #approve-modal .btns .primary { border: none; background: var(--brand); color: #fff; }
+  #approve-modal .btns .primary:disabled { opacity: .55; cursor: wait; }
+  /* toast */
+  #toast { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); z-index: 120;
+           background: var(--ink); color: #fff; border-radius: 10px; padding: 9px 18px; font-size: 13px;
+           opacity: 0; pointer-events: none; transition: opacity .25s; max-width: 82vw; }
+  #toast.show { opacity: 1; }
+  #toast.err { background: var(--red); }
+</style>
 </head>
 <body>
-<p>审核页施工中(ch09 Task 12)。</p>
+<div class="wrap">
+  <div data-admin-nav-anchor></div>
+  <header>
+    <div class="logo">🐱</div>
+    <div><h1>飞轮待审队列</h1><div class="sub">低置信问题归并沉淀 · 人工把好最后一道关</div></div>
+    <select id="status">
+      <option>待审</option><option>通过</option><option>驳回</option><option>全部</option>
+    </select>
+    <button id="refresh">刷新</button>
+  </header>
+
+  <div class="gates">
+    审核前先过三道闸:<b>① 垃圾过滤</b>——乱输入、测试胡打、不当言论直接驳回;<b>② 时效</b>——强时效问题(活动截止类)不沉淀,驳回;<b>③ 频次</b>——低频冷门问题不值得占库,驳回。
+  </div>
+
+  <div class="table-wrap">
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th style="width:32%">标准化问题</th><th>出现次数</th><th style="width:26%">示例答案摘要</th>
+          <th>状态</th><th>操作</th>
+        </tr></thead>
+        <tbody id="queue"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>暂无数据——去聊天页问几个答不上的问题,跑一轮 make flywheel 再来。</div>
+  </div>
+</div>
+
+<div id="approve-mask">
+  <div id="approve-modal">
+    <h3>通过并写回知识库</h3>
+    <div class="q" id="approve-q"></div>
+    <label for="approve-ans">核准答案(将作为 FAQ 知识块落库并向量化,下一问即可检索命中)</label>
+    <textarea id="approve-ans"></textarea>
+    <div class="btns">
+      <button id="approve-cancel">取消</button>
+      <button id="approve-ok" class="primary">确认通过</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/static/admin.js"></script>
+<script>
+(function () {
+  'use strict';
+  mountAdminNav('flywheel');
+
+  var $ = function (id) { return document.getElementById(id); };
+  var SOURCE_LABEL = { retrieval_low_conf: '检索置信度低', self_check: '模型自评不足', user_feedback: '用户反馈' };
+  var pendingId = null;          // 弹框当前处理的缺口 id
+  var openDetail = {};           // id → 已展开的详情 tr(行点击 toggle 用)
+
+  function toast(msg, err) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = err ? 'err show' : 'show';
+    clearTimeout(toast._h);
+    toast._h = setTimeout(function () { t.className = ''; }, 2800);
+  }
+
+  function fmtTime(s) { return (s || '').replace('T', ' ').slice(0, 16); }
+
+  function loadQueue() {
+    var st = $('status').value;
+    var qs = st === '全部' ? '' : '?status=' + encodeURIComponent(st);
+    fetch('/api/review/queue' + qs).then(function (r) { return r.json(); }).then(function (d) {
+      render(d.items || []);
+    }).catch(function () { toast('队列加载失败', true); });
+  }
+
+  function render(items) {
+    var tb = $('queue');
+    tb.textContent = '';
+    openDetail = {};
+    $('empty').hidden = items.length > 0;
+    items.forEach(function (it) {
+      var tr = document.createElement('tr');
+      tr.className = 'item';
+      tr.dataset.id = it.id;
+
+      var tdQ = document.createElement('td');
+      tdQ.className = 'q'; tdQ.textContent = it.normalized_question;
+      var tdN = document.createElement('td');
+      var freq = document.createElement('span');
+      freq.className = 'freq' + (it.occurrence_count >= 3 ? ' hot' : '');
+      freq.textContent = it.occurrence_count;
+      freq.title = it.occurrence_count >= 3 ? '高频缺口,优先处理' : '出现次数';
+      tdN.appendChild(freq);
+      var tdA = document.createElement('td');
+      tdA.className = 'ans'; tdA.textContent = it.ai_suggested_answer || '—';
+      var tdS = document.createElement('td');
+      var st = document.createElement('span');
+      st.className = 'st ' + it.review_status; st.textContent = it.review_status;
+      tdS.appendChild(st);
+      var tdO = document.createElement('td');
+      tdO.className = 'ops';
+      tdO.appendChild(opBtn(it, '通过', false));
+      tdO.appendChild(opBtn(it, '驳回', true));
+      [tdQ, tdN, tdA, tdS, tdO].forEach(function (td) { tr.appendChild(td); });
+      tr.addEventListener('click', function () { toggleDetail(it.id, tr); });
+      tb.appendChild(tr);
+    });
+  }
+
+  function opBtn(it, label, warn) {
+    var b = document.createElement('button');
+    b.className = 'op' + (warn ? ' warn' : '');
+    b.textContent = label;
+    b.disabled = it.review_status !== '待审';
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (label === '通过') openApprove(it); else reject(it.id);
+    });
+    return b;
+  }
+
+  function toggleDetail(id, tr) {
+    if (openDetail[id]) {                      // 已展开 → 收起
+      openDetail[id].remove();
+      delete openDetail[id];
+      tr.classList.remove('open');
+      return;
+    }
+    fetch('/api/review/' + id).then(function (r) { return r.json(); }).then(function (d) {
+      var det = document.createElement('tr');
+      det.className = 'detail';
+      var td = document.createElement('td');
+      td.colSpan = 5;
+      td.appendChild(detailInner(d));
+      det.appendChild(td);
+      tr.after(det);
+      tr.classList.add('open');
+      openDetail[id] = det;
+    }).catch(function () { toast('详情加载失败', true); });
+  }
+
+  function detailInner(d) {
+    var box = document.createElement('div');
+    box.className = 'detail-inner';
+    var hint = document.createElement('div');
+    hint.className = 'detail-hint';
+    hint.textContent = '对着快照判断:知识库真缺这块,还是有但没检到。';
+    box.appendChild(hint);
+
+    (d.raws || []).forEach(function (raw) {
+      var card = document.createElement('div');
+      card.className = 'raw';
+      var head = document.createElement('div');
+      head.className = 'raw-head';
+      var badge = document.createElement('span');
+      badge.className = 'src ' + raw.source;
+      badge.textContent = SOURCE_LABEL[raw.source] || raw.source;
+      var time = document.createElement('span');
+      time.className = 'raw-time';
+      time.textContent = fmtTime(raw.created_at);
+      head.appendChild(badge); head.appendChild(time);
+      card.appendChild(head);
+
+      var q = document.createElement('div');
+      q.textContent = '问:' + raw.raw_question;
+      card.appendChild(q);
+      if (raw.reason) {
+        var reason = document.createElement('div');
+        reason.className = 'raw-reason';
+        reason.textContent = '判定:' + raw.reason;
+        reason.title = raw.reason;
+        card.appendChild(reason);
+      }
+
+      var snaps = document.createElement('div');
+      snaps.className = 'snaps';
+      if (!raw.retrieved_chunks) {
+        var none = document.createElement('div');
+        none.className = 'no-snap';
+        none.textContent = '该入口未走检索,无快照';
+        snaps.appendChild(none);
+      } else {
+        raw.retrieved_chunks.forEach(function (c) {
+          snaps.appendChild(snapCard(c));
+        });
+      }
+      card.appendChild(snaps);
+      box.appendChild(card);
+    });
+    return box;
+  }
+
+  function snapCard(c) {
+    var s = document.createElement('div');
+    s.className = 'snap';
+    var q = document.createElement('div'); q.className = 'sq'; q.textContent = c.question || '(无问题)';
+    var a = document.createElement('div'); a.className = 'sa'; a.textContent = c.answer || '';
+    s.appendChild(q); s.appendChild(a);
+    if (c.rerank_score !== undefined && c.rerank_score !== null) {
+      var bar = document.createElement('div');
+      bar.className = 'score-bar';
+      var rail = document.createElement('span'); rail.className = 'bar';
+      var fill = document.createElement('i');
+      var pct = Math.max(0, Math.min(1, Number(c.rerank_score) || 0));
+      fill.style.width = (pct * 100).toFixed(0) + '%';
+      rail.appendChild(fill);
+      var num = document.createElement('span'); num.className = 'score-num';
+      num.textContent = pct.toFixed(2);
+      bar.appendChild(rail); bar.appendChild(num);
+      s.appendChild(bar);
+    }
+    var path = document.createElement('div');
+    path.className = 'snap-path'; path.textContent = c.section_path || '';
+    s.appendChild(path);
+    return s;
+  }
+
+  function openApprove(it) {
+    pendingId = it.id;
+    $('approve-q').textContent = it.normalized_question;
+    $('approve-ans').value = it.ai_suggested_answer || '';
+    $('approve-ok').disabled = false;
+    $('approve-mask').classList.add('show');
+  }
+
+  function closeApprove() { $('approve-mask').classList.remove('show'); pendingId = null; }
+
+  $('approve-cancel').addEventListener('click', closeApprove);
+  $('approve-mask').addEventListener('click', function (e) { if (e.target === this) closeApprove(); });
+  $('approve-ok').addEventListener('click', function () {
+    var ans = $('approve-ans').value.trim();
+    if (!ans) { toast('核准答案不能为空', true); return; }
+    this.disabled = true;
+    fetch('/api/review/' + pendingId + '/approve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved_answer: ans }),
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, detail: d.detail }; });
+    }).then(function (res) {
+      closeApprove();
+      if (res.ok) { toast('已写回知识库,下次同类问题可直接检索命中'); loadQueue(); }
+      else toast(res.detail || '写回失败(上游/Milvus 不在线可重试)', true);
+    }).catch(function () { closeApprove(); toast('请求失败,可重试', true); });
+  });
+
+  function reject(id) {
+    fetch('/api/review/' + id + '/reject', { method: 'POST' }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, detail: d.detail }; });
+    }).then(function (res) {
+      if (res.ok) { toast('已驳回(终审)'); loadQueue(); }
+      else toast(res.detail || '驳回失败', true);
+    }).catch(function () { toast('请求失败,可重试', true); });
+  }
+
+  $('status').addEventListener('change', loadQueue);
+  $('refresh').addEventListener('click', loadQueue);
+  loadQueue();
+})();
+</script>
 </body>
 </html>
