@@ -25,6 +25,9 @@ class ConversationState(TypedDict, total=False):
     evidence: str          # 知识路编号证据文本
     citations: list        # 引用 chunk(前端可点)
     evidence_strong: bool  # 生成前证据闸信号
+    evidence_confidence: float  # ch09 正式置信度闸:四信号加权总分(0-1)
+    fallback_source: str        # ch09 兜底落池 source:retrieval_low_conf | self_check
+    retrieved_snapshot: list    # ch09 召回快照(Top3 原文+得分):走了检索就有,落池/👎回捞共用
     answer: str            # 确定性节点产出的答复(agent 答复走流式,不落此字段)
     steps: int             # ReAct 步数(停止条件)
     tokens_used: int       # 逐步累加进 trace,供排障与 ch09 统计,不当停止条件

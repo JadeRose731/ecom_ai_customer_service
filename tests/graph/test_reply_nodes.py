@@ -28,7 +28,7 @@ async def test_complaint_reply_offers_two_actions():
 async def test_fallback_reply_records_low_confidence(monkeypatch):
     calls = {}
 
-    async def fake_insert(conversation_id, raw_question, source, reason):
+    async def fake_insert(conversation_id, raw_question, source, reason, retrieved_chunks=None):
         calls.update(conversation_id=conversation_id, raw=raw_question, source=source)
         return 1
 

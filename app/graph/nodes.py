@@ -7,6 +7,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.types import interrupt
 
 from app.config import settings
+from app.core.confidence import compute_evidence_confidence, snapshot_from_hits
 from app.core.observability import tag_intent
 from app.core import coref, memory
 from app.core import intent as intent_mod
@@ -63,12 +64,22 @@ async def complaint_reply(state) -> dict:
 
 
 async def fallback_reply(state) -> dict:
-    """置信度兜底:证据弱回兜底话术,并把问题落低置信池留给数据飞轮。"""
-    reason = f"检索证据不足(top={state.get('trace', {}).get('evidence_top', 0):.3f})"
+    """置信度兜底:证据弱回兜底话术,并把问题落低置信池留给数据飞轮(ch09:source 打对标签
+    retrieval_low_conf/self_check,随条存召回快照给审核页;话术与转人工按钮不变)。"""
+    source = state.get("fallback_source") or "retrieval_low_conf"
+    signals = state.get("trace", {}).get("confidence_signals") or {}
+    reason = (f"evidence_confidence={state.get('evidence_confidence', 0.0):.3f} "
+              f"signals={json.dumps(signals, ensure_ascii=False)}")
+    if source == "self_check":
+        reason += f" self_check={state.get('trace', {}).get('self_check', '')}"
+    snapshot = state.get("retrieved_snapshot") or None   # 没走检索存 NULL,不存 []
     await repository.insert_low_confidence(
-        state.get("conversation_id"), _user_text(state), "retrieval_low_conf", reason
+        state.get("conversation_id"), _user_text(state), source, reason,
+        retrieved_chunks=snapshot,
     )
-    return {"answer": FALLBACK_REPLY, "trace": {"route": "fallback"}}
+    return {"answer": FALLBACK_REPLY,
+            "suggested_actions": [{"type": "transfer_human"}],
+            "trace": {"route": "fallback"}}
 
 
 async def script_reply(state) -> dict:
@@ -125,6 +136,8 @@ async def retrieve_policy(state) -> dict:
     """退款子流程强制检索政策:Query 扩写 3 条 → 多 query 各检索一次 → 按 chunk id 去重合并
     (保留每 id 最高分)→ 按分降序拼编号证据。产出注入 main_agent 作「能不能退」的判据(README L194:
     不让模型凭记忆答)。库里知识一份,扩写只在检索侧现查现用。"""
+    tag_intent(state.get("intent", "其他"), state.get("intent_confidence", 0.0),
+               session_id=state.get("conversation_id"))   # ch09:本节点 LLM span 按 intent 分组
     base = state.get("resolved_query") or _user_text(state)
     od = state.get("order_data") or {}
     seed = f"{base} {od.get('status', '')}".strip()
@@ -149,8 +162,11 @@ async def retrieve_policy(state) -> dict:
 
 
 async def forced_rag(state) -> dict:
-    """知识类强制检索(复用 ch03/04 检索器):产出编号证据 + 证据强弱信号。
-    复刻 query_faq 的两道生成前证据闸(检索分闸 + 自评闸),但把结果落进 State。"""
+    """知识类强制检索:产出编号证据 + 证据强弱信号。ch09 把 ch05 最简机械闸升级成
+    正式置信度闸(四信号加权,阈值评估集校准),闸位不动:检索后、进 Agent 前。
+    快照规则:只要走了检索就存 Top3 快照——闸不过随落池写库;闸都过留给事后 👎 回捞。"""
+    tag_intent(state.get("intent", "其他"), state.get("intent_confidence", 0.0),
+               session_id=state.get("conversation_id"))   # ch09:本节点 LLM span 按 intent 分组
     query_raw = _user_text(state)
     u = await query_understanding.understand(query_raw)
     query = u["standard"]
@@ -158,19 +174,23 @@ async def forced_rag(state) -> dict:
     search_query = query + (" " + " ".join(u["expanded"]) if u["expanded"] else "")
 
     hits = await retrieval.search_knowledge(search_query, strategy="hybrid_rerank")
-    top = hits[0]["rerank_score"] if hits else 0.0
+    conf = compute_evidence_confidence(hits)
+    snapshot = snapshot_from_hits(hits)
+    base = {"evidence_confidence": conf.score, "retrieved_snapshot": snapshot}
 
-    # 机械闸:无召回 or 最高分低于阈值
-    if not hits or top < settings.rerank_min_score:
-        return {"evidence_strong": False,
-                "trace": {"forced_rag": True, "evidence_top": top}}
+    # 置信度闸(原机械闸升级):四信号加权总分低于校准阈值 → 证据弱,拒答落池
+    if conf.score < settings.evidence_confidence_threshold:
+        return {**base, "evidence_strong": False, "fallback_source": "retrieval_low_conf",
+                "trace": {"forced_rag": True, "evidence_confidence": conf.score,
+                          "confidence_signals": conf.signals}}
 
-    # 语义闸:生成前自评证据够不够
+    # 语义闸:生成前自评证据够不够(README 的 useful 判断)
     ev_texts = [f"{h['question']} {h['answer']}" for h in hits]
     chk = await selfcheck.check_sufficient(query, ev_texts)
     if not chk["useful"]:
-        return {"evidence_strong": False,
-                "trace": {"forced_rag": True, "evidence_top": top, "self_check": chk["reason"]}}
+        return {**base, "evidence_strong": False, "fallback_source": "self_check",
+                "trace": {"forced_rag": True, "evidence_confidence": conf.score,
+                          "confidence_signals": conf.signals, "self_check": chk["reason"]}}
 
     arranged = retrieval.arrange_head_tail(hits)
     citations = [
@@ -179,8 +199,9 @@ async def forced_rag(state) -> dict:
         for i, h in enumerate(arranged)
     ]
     evidence = "\n".join(f"[{c['n']}] {c['question']}: {c['answer']}" for c in citations)
-    return {"evidence_strong": True, "evidence": evidence, "citations": citations,
-            "trace": {"forced_rag": True, "evidence_top": top}}
+    return {**base, "evidence_strong": True, "evidence": evidence, "citations": citations,
+            "trace": {"forced_rag": True, "evidence_confidence": conf.score,
+                      "confidence_signals": conf.signals}}
 
 
 async def confidence_check(state) -> dict:
