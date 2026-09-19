@@ -157,6 +157,9 @@ ch10-eval:  ## 测试集评测:每类 P/R/F1 + 混淆矩阵 + 容错红线 + 判
 ch10-export:  ## 导出 ONNX 并校验与 torch 预测完全一致
 	PYTHONPATH=. uv run --group ml python scripts/ch10/export_onnx.py
 
+ch10-threshold-scan:  ## ch10 阈值扫描重演:九候选线各算一遍 micro-F1(需 :8110)
+	PYTHONPATH=. uv run python scripts/ch10/scan_threshold_replay.py
+
 classifier-up:  ## ch10 推理服务 :8110(ONNX 轻运行时)
 	@mkdir -p log data
 	@PYTHONPATH=. nohup uv run --group ml python scripts/ch10/serve.py > log/classifier.log 2>&1 & echo $$! > data/classifier.pid
@@ -166,5 +169,5 @@ classifier-down:
 	-@kill `cat data/classifier.pid 2>/dev/null` 2>/dev/null; rm -f data/classifier.pid
 	@echo "分类器服务已停"
 
-classify-pool:  ## ch10 旁路批量归类:攒够一批归一次,写 topic_classifications(需 :8110)
-	PYTHONPATH=. uv run python scripts/ch10/classify_pool.py
+classify-pool:  ## ch10 旁路批量归类:攒够一批归一次,写 topic_classifications(需 :8110);FORCE=1 不足一批强跑
+	PYTHONPATH=. uv run python scripts/ch10/classify_pool.py $(if $(FORCE),--force,)

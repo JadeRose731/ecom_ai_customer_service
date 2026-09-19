@@ -1,10 +1,13 @@
 """ch10 ONNX 导出:torch 模型 → onnx(变长 batch/seq),导出后跑测试集校验与 torch 预测完全一致。
+报告一式两份:控制台给人看,export_report.json 给验收页读——校验不过也先落报告再退出,
+页面才看得出「上次导出没过」,而不是一片空白。
 注意:torch 2.9+ 的 torch.onnx.export 默认 dynamo=True,导 HF 模型此处显式 dynamo=False
 走 TorchScript 导出器 + dynamic_axes 稳定路线(Context7 查证)。运行:make ch10-export。"""
 import json
 import pathlib
 import shutil
 import sys
+from datetime import datetime
 
 import numpy as np
 import onnxruntime as ort
@@ -14,6 +17,8 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 MODEL_DIR = pathlib.Path("data/ch10/model")
 OUT = pathlib.Path("data/ch10/onnx")
 TEST = pathlib.Path("data/ch10/dataset/test.jsonl")
+REPORTS = pathlib.Path("data/ch10/reports")
+OPSET = 17
 
 
 class LogitsWrapper(torch.nn.Module):
@@ -50,12 +55,12 @@ def main() -> None:
         dynamic_axes={"input_ids": dyn, "attention_mask": dyn,
                       "token_type_ids": dyn, "logits": {0: "batch"}},
         dynamo=False,
-        opset_version=17,
+        opset_version=OPSET,
     )
     tokenizer.save_pretrained(OUT)          # 带出 tokenizer.json 给轻运行时用
     shutil.copy(MODEL_DIR / "threshold.json", OUT / "threshold.json")
 
-    # 一致性校验:测试集全量,ONNX 与 torch 的过线标签必须完全一致
+    # 一致性校验:测试集全量,按行计账——logits 超容差与过线标签翻面都算不一致
     threshold = json.loads((OUT / "threshold.json").read_text())["threshold"]
     texts = [json.loads(l)["text"]
              for l in TEST.read_text(encoding="utf-8").splitlines() if l.strip()]
@@ -68,13 +73,23 @@ def main() -> None:
                             max_length=128, return_tensors="pt")
             t_logits = wrapper(**enc).numpy()
             (o_logits,) = sess.run(["logits"], {k: v.numpy() for k, v in enc.items()})
-            assert np.allclose(t_logits, o_logits, atol=1e-3), "logits 超容差"
+            close = np.isclose(t_logits, o_logits, atol=1e-3).all(axis=1)
             t_pred = (1 / (1 + np.exp(-t_logits)) >= threshold)
             o_pred = (1 / (1 + np.exp(-o_logits)) >= threshold)
-            mismatch += int((t_pred != o_pred).any(axis=1).sum())
+            mismatch += int((~close | (t_pred != o_pred).any(axis=1)).sum())
+
+    report = {"ran_at": datetime.now().isoformat(timespec="seconds"),
+              "checked": len(texts), "mismatch": mismatch, "passed": mismatch == 0,
+              "onnx_path": str(OUT / "model.onnx"),
+              "onnx_bytes": (OUT / "model.onnx").stat().st_size, "opset": OPSET}
+    REPORTS.mkdir(parents=True, exist_ok=True)
+    (REPORTS / "export_report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     if mismatch:
-        raise SystemExit(f"ONNX 与 torch 预测不一致 {mismatch} 条,导出失败")
-    print(f"ONNX 导出并校验通过({len(texts)} 条预测完全一致):{OUT}/model.onnx")
+        raise SystemExit(f"ONNX 与 torch 预测不一致 {mismatch} 条,导出失败"
+                         f"(报告已落 {REPORTS}/export_report.json)")
+    print(f"ONNX 导出并校验通过({len(texts)} 条预测完全一致):{OUT}/model.onnx;"
+          f"报告已落 {REPORTS}/export_report.json")
 
 
 if __name__ == "__main__":
