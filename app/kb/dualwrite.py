@@ -27,9 +27,12 @@ def _batches(items: list, size: int):
         yield items[i:i + size]
 
 
-async def vectorize_pending(client, batch_size: int = 64, collection: str = "knowledge") -> int:
+async def vectorize_pending(client=None, batch_size: int = 64,
+                            collection: str = milvus_client.COLLECTION) -> int:
     """幂等可重跑:取 pending → 拼 category+questions+answer → 嵌入 + BM25 text → Milvus upsert(PK=id)
-    → 回填 vector_id、status=done。崩在任意批,重跑只捡剩余 pending(Milvus 按 id upsert 无重)。"""
+    → 回填 vector_id、status=done。崩在任意批,重跑只捡剩余 pending(Milvus 按 id upsert 无重)。
+    ch09:client 缺省时惰性取单例,upsert/flush 走 acall——server 进程(审核通过写回)
+    与脚本两个场景共用一条安全路径。"""
     pending = await repository.list_pending_chunks()
     done = 0
     for batch in _batches(pending, batch_size):
@@ -42,10 +45,18 @@ async def vectorize_pending(client, batch_size: int = 64, collection: str = "kno
              "category": r.category or ""}
             for r, v, t in zip(batch, vectors, texts)
         ]
-        milvus_client.upsert_vectors(client, rows, collection=collection)
+
+        def work_upsert(rows=rows):
+            c = client or milvus_client.get_client()
+            milvus_client.ensure_collection(c, collection=collection)
+            milvus_client.upsert_vectors(c, rows, collection=collection)
+        await milvus_client.acall(work_upsert)
         for r in batch:
             await repository.mark_chunk_vectorized(r.id, str(r.id))
         done += len(batch)
     if done:
-        milvus_client.flush(client, collection=collection)  # 刷盘,数据方可被 BM25 检索
+        def work_flush():
+            c = client or milvus_client.get_client()
+            milvus_client.flush(c, collection=collection)  # 刷盘,数据方可被 BM25 检索
+        await milvus_client.acall(work_flush)
     return done

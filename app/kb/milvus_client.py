@@ -1,6 +1,8 @@
 # app/kb/milvus_client.py
 # ch04:集合重建为 dense(bge-m3)+ text(中文分词)+ sparse(BM25 Function)+ 标量元数据。
 # BM25 全文检索只有 Standalone 支持(无 Lite),本仓库 ch03 起即跑 Docker Standalone。
+import asyncio
+
 from pymilvus import (
     AnnSearchRequest, DataType, Function, FunctionType, MilvusClient, RRFRanker,
 )
@@ -58,6 +60,12 @@ def ensure_collection(client: MilvusClient, collection: str = COLLECTION) -> Non
         client.load_collection(collection)
     if client is _CLIENT:
         _ensured.add(collection)
+
+
+async def acall(fn, /, *args, **kwargs):
+    """同步 Milvus 调用丢线程池执行,事件循环不等它(ch09:审核通过写回在 server 进程内跑,
+    批量 upsert+flush 可达秒级,不能占住 loop)。"""
+    return await asyncio.to_thread(fn, *args, **kwargs)
 
 
 def upsert_vectors(client: MilvusClient, rows: list[dict], collection: str = COLLECTION) -> None:

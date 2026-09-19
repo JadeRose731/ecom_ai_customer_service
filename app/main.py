@@ -16,6 +16,7 @@ from app.api.jobs import router as jobs_router
 from app.api.kb import router as kb_router
 from app.api.admin import router as admin_router
 from app.api.rageval import router as rageval_router
+from app.api.review import router as review_router
 from app.graph import runtime
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ app.include_router(kb_router)
 app.include_router(jobs_router)
 app.include_router(admin_router)
 app.include_router(rageval_router)
+app.include_router(review_router)
 
 # ch03 后台页面:各页保持原路径(路由必须先于根路径 StaticFiles 挂载注册,否则被吞)
 _STATIC = pathlib.Path(__file__).resolve().parent / "static"
@@ -60,6 +62,12 @@ async def admin_page():
 @app.get("/rag-eval")
 async def rageval_page():
     return FileResponse(_STATIC / "rageval.html")
+
+
+# ch09:审核后台页(页面本体 Task 12 建,先落路由避免占位期 404)
+@app.get("/review")
+async def review_page():
+    return FileResponse(_STATIC / "review.html")
 
 
 # ch03:后台共用静态资源挂 /static(页面里引 /static/admin.js 等)。
