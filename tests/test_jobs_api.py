@@ -1,4 +1,6 @@
-# ch03 Task 17:作业运行器的安全边界
+# ch03 Task 17:作业运行器的安全边界;ch10 追加:FORCE 变体、stopped 语义、注册表口径
+import threading
+
 from app.core import jobs
 
 
@@ -30,3 +32,42 @@ def test_every_job_target_exists_in_makefile():
                if ln and not ln.startswith(("\t", " ", "#")) and ":" in ln}
     for spec in jobs.JOBS.values():
         assert spec.target in targets, f"Makefile 缺目标 {spec.target}"
+
+
+# ---------- ch10 追加 ----------
+async def test_stop_running_job_marks_stopped(client, monkeypatch):
+    """stop 后状态是 stopped:人为 kill 的非零退出码不改写成 failed。"""
+
+    class HeldProc:
+        def __init__(self):
+            self.pid = 7
+            self._ev = threading.Event()
+
+        def poll(self):
+            return None if not self._ev.is_set() else 1
+
+        def wait(self):
+            self._ev.wait(timeout=5)
+            return 1
+
+    held = HeldProc()
+    monkeypatch.setattr(jobs, "_stop_proc", lambda pid: held._ev.set())
+    monkeypatch.setitem(jobs._procs, "ch10-eval", held)
+    r = await client.post("/api/jobs/ch10-eval/stop")
+    assert r.status_code == 200
+    assert r.json()["status"] == "stopped"
+    assert r.json()["running"] is False
+
+
+async def test_list_covers_full_registry(client):
+    body = (await client.get("/api/jobs")).json()
+    assert set(body["jobs"]) == set(jobs.JOBS)
+    assert body["jobs"]["classify-pool-force"]["needs"]
+    assert body["jobs"]["ch10-train"]["heavy"] is True
+
+
+def test_force_variant_same_recipe():
+    # 「不足一批强跑」走同一条 make 配方:FORCE=1 只是参数,不复制命令
+    assert jobs.JOBS["classify-pool-force"].target == "classify-pool"
+    assert jobs.JOBS["classify-pool-force"].force is True
+    assert jobs.JOBS["classify-pool"].force is False
