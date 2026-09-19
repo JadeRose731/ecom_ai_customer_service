@@ -311,14 +311,32 @@ function addFeedbackBar(shell) {
   down.className = 'fb-btn'; down.textContent = '👎 没帮助';
   const note = document.createElement('span');
   bar.appendChild(up); bar.appendChild(down); bar.appendChild(note);
-  let locked = false;
+  // ch09:反馈落库——👎 进问题池(source=user_feedback),👍 只记日志;失败静默,UI 行为不变
+  const userQuestionBefore = (barEl) => {
+    let row = barEl.closest('.row.bot');
+    while (row && (row = row.previousElementSibling)) {
+      if (row.classList.contains('user')) {
+        const b = row.querySelector('.bubble');
+        return b ? b.textContent.trim() : '';
+      }
+    }
+    return '';
+  };
   const pick = (good, chosen, other) => () => {
     if (locked) return;
     locked = true;
     chosen.classList.add('active');
     other.classList.add('dim');
     note.textContent = '已反馈';
-    // 纯前端一次性交互,不落库(反馈入问题池 source=user_feedback 归后续数据飞轮章)
+    fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: Number(conversationId),
+        rating: chosen === down ? 'down' : 'up',
+        question: userQuestionBefore(bar),
+      }),
+    }).catch(() => {});
   };
   up.addEventListener('click', pick(true, up, down));
   down.addEventListener('click', pick(false, down, up));

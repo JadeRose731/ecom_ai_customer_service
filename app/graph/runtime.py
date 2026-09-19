@@ -70,6 +70,20 @@ def get_graph():
     return _graph
 
 
+async def get_turn_snapshot(conversation_id: int) -> dict:
+    """👎 快照尽力回捞:读该会话 checkpointer 终态,返回最近一轮的用户问题与召回快照。
+    调用方拿去比对被踩的 question,对得上才用快照——踩历史消息时快照可能已是别轮的,不硬塞。"""
+    config = {"configurable": {"thread_id": str(conversation_id)}}
+    st = await get_graph().aget_state(config)
+    values = getattr(st, "values", None) or {}
+    question = ""
+    for m in reversed(values.get("messages", [])):
+        if getattr(m, "type", "") == "human":
+            question = m.content if isinstance(m.content, str) else ""
+            break
+    return {"question": question, "snapshot": values.get("retrieved_snapshot") or []}
+
+
 async def _ensure_conversation(user_id: str, conversation_id: int | None) -> tuple[int, str, int]:
     """返回 (cid, summary, summary_upto_msg_id):入口一次库读把摘要两字段一并带出。"""
     if conversation_id is None:
