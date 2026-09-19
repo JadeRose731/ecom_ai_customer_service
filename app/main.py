@@ -49,7 +49,6 @@ app.include_router(observability_router)
 app.include_router(rageval_router)
 app.include_router(review_router)
 app.include_router(topics_router)
-app.include_router(jobs_router)
 app.include_router(acceptance_router)
 
 # ch03 后台页面:各页保持原路径(路由必须先于根路径 StaticFiles 挂载注册,否则被吞)

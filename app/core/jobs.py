@@ -130,11 +130,21 @@ def start(name: str) -> None:
     log.write(f"# argv: {' '.join(spec.argv)}\n# 发起: {meta.started_at}\n")
     log.flush()
 
-    if name == "classifier-up":          # 壳脚本配方,运行器原生托管
-        _finish(meta, _serve_up(log))
-        return
-    if name == "classifier-down":
-        _finish(meta, _serve_down(log))
+    if name in ("classifier-up", "classifier-down"):
+        # 壳脚本配方,运行器原生托管;进线程跑(HTTP 轮询秒级起),异常也给出终态
+        fn = _serve_up if name == "classifier-up" else _serve_down
+
+        def serve_work() -> None:
+            rc = 0
+            try:
+                rc = fn(log)
+            except Exception as e:
+                log.write(f"\n运行器异常:{e!r}\n")
+                rc = -1
+            finally:
+                _finish(meta, rc)
+
+        threading.Thread(target=serve_work, name=f"job-{name}", daemon=True).start()
         return
 
     def work() -> None:
@@ -165,8 +175,11 @@ def stop(name: str) -> None:
         raise JobNotFound(name)
     proc = _procs.get(name)
     meta = _meta.get(name)
-    if proc is None and meta is None:
-        return                            # 从没跑过,无事可停
+    running = ((proc is not None and proc.poll() is None)
+               or (meta is not None and meta.started_at is not None
+                   and meta.returncode is None and not meta.stopped))
+    if not running:
+        return                            # 没跑过或已收尾:不改写既有终态
     meta = meta or _Meta()
     _meta[name] = meta
     meta.stopped = True   # 人为停的记 stopped,不按非零退出码冤枉成 failed

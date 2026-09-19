@@ -37,7 +37,12 @@ def _load_report(fname: str, make: str) -> dict:
     if not p.exists():
         return {"present": False, "make": make,
                 "hint": f"还没跑过——点按钮或终端 make {make} 生成产物"}
-    data = json.loads(p.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        # 作业被中途 stop 会留下残缺 json(脚本 write_text 非原子)——按没跑过处理,不炸页面
+        return {"present": False, "make": make,
+                "hint": f"产物损坏(可能被中途停止)——重跑 make {make} 即可覆盖"}
     data["present"] = True
     data["make"] = make
     return data
@@ -64,9 +69,10 @@ def _dir_stats(d: pathlib.Path, names: list[str]) -> list[dict]:
     return out
 
 
-def _probe_service() -> dict:
+async def _probe_service() -> dict:
     try:
-        r = httpx.get(f"{SERVICE}/healthz", timeout=1.5)
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            r = await client.get(f"{SERVICE}/healthz")
         return {"online": r.status_code == 200}
     except Exception:
         return {"online": False}
@@ -95,7 +101,7 @@ async def overview():
     scan = _load_report("threshold_scan.json", "ch10-threshold-scan")
     export_r = _load_report("export_report.json", "ch10-export")
     pool = _load_report("classify_run.json", "classify-pool")
-    svc = _probe_service()
+    svc = await _probe_service()
 
     corpus_labeled = _stat(DATA_DIR / "corpus_labeled.jsonl")
     sample_review = _stat(DATA_DIR / "sample_review.md")
@@ -186,7 +192,7 @@ async def eval_detail():
         threshold_in_use = json.loads(tf.read_text(encoding="utf-8"))
     return {"eval": eval_r, "scan": scan, "threshold_in_use": threshold_in_use,
             "severity": eval_r.get("red_lines") if eval_r["present"] else None,
-            "classifier": _probe_service()}
+            "classifier": await _probe_service()}
 
 
 @router.get("/api/acceptance/data")
@@ -236,7 +242,7 @@ async def errors_detail():
 
 @router.get("/api/acceptance/service")
 async def service_detail():
-    return {"classifier": _probe_service(), "onnx": _stat(ONNX / "model.onnx"),
+    return {"classifier": await _probe_service(), "onnx": _stat(ONNX / "model.onnx"),
             "threshold_in_use": _read_json(ONNX / "threshold.json")}
 
 
@@ -246,8 +252,9 @@ async def classify_one(payload: dict):
     if not text:
         raise HTTPException(status_code=400, detail="text 不能为空")
     try:
-        r = httpx.post(f"{SERVICE}/classify", json={"texts": [text]}, timeout=30)
-        r.raise_for_status()
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(f"{SERVICE}/classify", json={"texts": [text]})
+            r.raise_for_status()
     except Exception:
         raise HTTPException(status_code=503, detail="分类器服务不在线,先点「拉起推理服务」")
     return {"result": r.json()["results"][0],
@@ -256,7 +263,12 @@ async def classify_one(payload: dict):
 
 # ---------- 内部 ----------
 def _read_json(p: pathlib.Path) -> dict | None:
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return None
 
 
 def _split_stats() -> dict:

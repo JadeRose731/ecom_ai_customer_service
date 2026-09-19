@@ -21,6 +21,11 @@ async def client(tmp_path, monkeypatch):
         return {"total": 0, "latest": None, "classes": []}
 
     monkeypatch.setattr(repository, "topic_distribution", _no_db)
+
+    async def _svc_down():
+        return {"online": False}
+
+    monkeypatch.setattr(acceptance_api, "_probe_service", _svc_down)   # :8110 在不在线不该影响测试
     app = FastAPI()
     app.include_router(acceptance_api.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
@@ -77,3 +82,15 @@ async def test_eval_missing_reports(client):
     body = r.json()
     assert body["eval"]["present"] is False and body["scan"]["present"] is False
     assert body["threshold_in_use"] is None
+
+
+async def test_corrupt_report_reads_as_missing_not_500(client, tmp_path):
+    """作业被页面 stop 掐在写一半时,产物 json 可能是残的——按没跑过处理,不炸页面。"""
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "reports" / "eval_report.json").write_text('{"ran_at": "2026-09-', encoding="utf-8")
+    r = await client.get("/api/acceptance/overview")
+    assert r.status_code == 200
+    by_key = {b["key"]: b for b in r.json()["blocks"]}
+    assert by_key["eval"]["status"] == "missing"
+    r2 = await client.get("/api/acceptance/errors")
+    assert r2.status_code == 200 and r2.json()["eval"]["present"] is False

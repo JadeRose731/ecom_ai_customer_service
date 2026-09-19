@@ -107,6 +107,18 @@ def test_pass_fail_by_exit_code(clean_runs, monkeypatch):
     assert jobs.status("ch10-export")["status"] == "pass"
 
 
+def test_stop_after_finish_keeps_terminal_state(clean_runs, monkeypatch):
+    # 跑完的作业再点「停止」不该把它从 pass 改写成 stopped
+    held = _HeldProc(rc=0)
+    monkeypatch.setattr(jobs, "_popen", lambda step, log: held)
+    monkeypatch.setattr(jobs, "_stop_proc", lambda pid: held.release())
+    jobs.start("ch10-export")
+    held.release()
+    _drain("ch10-export")
+    jobs.stop("ch10-export")
+    assert jobs.status("ch10-export")["status"] == "pass"
+
+
 def test_force_variant_registered():
     # 「不足一批强跑」走同一条 make 配方:FORCE=1 只是参数,不复制命令
     spec = jobs.JOBS["classify-pool-force"]
