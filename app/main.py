@@ -80,6 +80,17 @@ async def observability_page():
     return FileResponse(_STATIC / "observability.html")
 
 
+# ch10:主题分布页 + 类目问题列表页(类目与页码走地址栏,贴链接直达)
+@app.get("/topics")
+async def topics_page():
+    return FileResponse(_STATIC / "topics.html")
+
+
+@app.get("/topics/questions")
+async def topic_questions_page():
+    return FileResponse(_STATIC / "topic-questions.html")
+
+
 # ch03:后台共用静态资源挂 /static(页面里引 /static/admin.js 等)。
 # 注意挂载顺序:/static 先于根路径 catch-all,否则永远轮不到它。
 app.mount("/static", StaticFiles(directory=_STATIC), name="static-files")

@@ -92,6 +92,15 @@ async def test_questions_unknown_label_returns_400(client):
     assert r.status_code == 400
 
 
+async def test_questions_item_carries_source_occurrence_classified_at(client):
+    # 列表页要展示:来源 / 同义合并条数 / 归类时间
+    await _seed_classified("猫窝买大了想退", ["尺码"], review="猫窝尺寸问题")
+    item = (await client.get("/api/topics/questions", params={"label": "尺码"})).json()["items"][0]
+    assert item["source"] == "retrieval_low_conf"
+    assert item["occurrence_count"] == 1
+    assert item["classified_at"]  # ISO 时间串存在
+
+
 async def test_distribution_samples_dedupe_by_text(client):
     # 同一标准化问法对应池里两行(两次低置信),都归「尺码」:样例去重,计数不减
     for raw in ("猫窝买大了想退一号", "猫窝买大了想退二号"):

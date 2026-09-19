@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MewHelp · 主题分布</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2430; --muted: #8a93a6;
+    --brand: #ff7a45; --brand-soft: #fff1ea; --line: #e6e9f0;
+    --blue: #3b82f6; --amber: #d97706; --red: #d03050; --green: #16a34a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  .wrap { max-width: 1080px; margin: 24px auto; padding: 0 16px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  header .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); color: #fff;
+                 display: grid; place-items: center; font-size: 18px; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header button { margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--ink);
+                  padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  header button:hover { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+  /* 顶部统计条 */
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat { flex: 1; min-width: 200px; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 14px; padding: 12px 18px; box-shadow: 0 6px 30px rgba(31,36,48,.06); }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .v { font-size: 22px; font-weight: 700; line-height: 1.4; }
+  .stat .v.dim { color: var(--muted); font-weight: 400; font-size: 15px; }
+  /* 17 类横向条形图(纯 HTML/CSS) */
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+           box-shadow: 0 6px 30px rgba(31,36,48,.06); padding: 6px 18px; }
+  details.row { border-bottom: 1px solid var(--line); }
+  details.row:last-child { border-bottom: none; }
+  details.row summary { list-style: none; display: flex; align-items: center; gap: 12px;
+                        padding: 10px 0; cursor: pointer; }
+  details.row summary::-webkit-details-marker { display: none; }
+  details.row summary:hover .name { color: var(--brand); }
+  .tw { flex: 0 0 12px; color: var(--muted); font-size: 11px; transition: transform .15s; }
+  details[open] .tw { transform: rotate(90deg); }
+  .name { flex: 0 0 88px; color: var(--ink); font-size: 13px; text-decoration: none; }
+  .name:hover { color: var(--brand); }
+  .track { flex: 1; height: 12px; background: #eef0f4; border-radius: 6px; overflow: hidden; }
+  .track i { display: block; height: 100%; min-width: 2px; border-radius: 6px;
+             background: linear-gradient(90deg, #ffa678, var(--brand)); }
+  .cnt { flex: 0 0 40px; text-align: right; font-size: 13px; font-weight: 600; }
+  /* count 为 0 的类目整行淡显 */
+  details.row.dim .name, details.row.dim .cnt { color: #c2c8d4; font-weight: 400; }
+  details.row.dim .track i { background: #dde1e8; }
+  details.row.dim summary:hover .name { color: var(--brand); }
+  /* 展开的样例框 */
+  .samples { padding: 2px 0 14px 24px; }
+  .sample { font-size: 13px; color: #4b5563; background: #fcfcfd; border: 1px dashed #c7ccd6;
+            border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; }
+  .all { font-size: 12px; color: var(--brand); text-decoration: none; }
+  .all:hover { text-decoration: underline; }
+  .empty { padding: 40px; text-align: center; color: var(--muted);
+           background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div data-admin-nav-anchor></div>
+  <header>
+    <div class="logo">🐱</div>
+    <div><h1>主题分布</h1><div class="sub">喵喵优选 · 各类目问题量一览,决定先补哪块知识</div></div>
+    <button id="refresh">刷新</button>
+  </header>
+
+  <div class="stats" id="stats" hidden>
+    <div class="stat"><div class="k">总归类问题数</div><div class="v" id="total">—</div></div>
+    <div class="stat"><div class="k">最近归类时间</div><div class="v dim" id="latest">—</div></div>
+  </div>
+
+  <div class="chart" id="chart" hidden></div>
+  <div class="empty" id="empty" hidden>还没有归类数据——池里的问题攒够一批后跑一轮 make classify-pool 再来。</div>
+</div>
+
+<script src="/static/admin.js"></script>
+<script>
+(function () {
+  'use strict';
+  mountAdminNav('topics');
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function fmtTime(s) { return (s || '').replace('T', ' ').slice(0, 16); }
+
+  function qUrl(label, suffix) {
+    return '/topics/questions?label=' + encodeURIComponent(label) + (suffix || '');
+  }
+
+  function render(d) {
+    $('stats').hidden = false;
+    $('total').textContent = d.total;
+    $('latest').textContent = d.latest ? fmtTime(d.latest) : '暂无';
+
+    var rows = (d.classes || []).slice().sort(function (a, b) { return b.count - a.count; });
+    var max = rows.length ? Math.max(1, rows[0].count) : 1;
+    var chart = $('chart');
+    if (!d.total) { $('empty').hidden = false; return; }
+    chart.hidden = false;
+
+    rows.forEach(function (c) {
+      var det = document.createElement('details');
+      det.className = 'row' + (c.count === 0 ? ' dim' : '');
+
+      var sum = document.createElement('summary');
+      var tw = document.createElement('span'); tw.className = 'tw'; tw.textContent = '▶';
+      // 类目名是链接:进该类问题列表(stopPropagation,免得顺手把行折叠状态也切了)
+      var name = document.createElement('a');
+      name.className = 'name'; name.href = qUrl(c.label);
+      name.textContent = c.label;
+      name.addEventListener('click', function (e) { e.stopPropagation(); });
+      var track = document.createElement('span'); track.className = 'track';
+      var fill = document.createElement('i');
+      fill.style.width = (c.count / max * 100).toFixed(1) + '%';
+      track.appendChild(fill);
+      var cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.textContent = c.count;
+      sum.appendChild(tw); sum.appendChild(name); sum.appendChild(track); sum.appendChild(cnt);
+      det.appendChild(sum);
+
+      var box = document.createElement('div'); box.className = 'samples';
+      (c.samples || []).forEach(function (s) {
+        var sm = document.createElement('div'); sm.className = 'sample'; sm.textContent = s;
+        box.appendChild(sm);
+      });
+      if (!(c.samples || []).length) {
+        var none = document.createElement('div'); none.className = 'sample';
+        none.style.color = 'var(--muted)';
+        none.textContent = c.count ? '暂无样例' : '该类目还没有问题';
+        box.appendChild(none);
+      }
+      var all = document.createElement('a');
+      all.className = 'all'; all.href = qUrl(c.label);
+      all.textContent = '查看全部 ' + c.count + ' 条 →';
+      box.appendChild(all);
+      det.appendChild(box);
+
+      chart.appendChild(det);
+    });
+  }
+
+  function load() {
+    fetch('/api/topics/distribution')
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function () {
+        $('empty').hidden = false;
+        $('empty').textContent = '加载失败——确认主应用在线后点右上角刷新。';
+      });
+  }
+
+  $('refresh').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>

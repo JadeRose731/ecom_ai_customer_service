@@ -9,6 +9,7 @@
     { key: 'kb', title: '知识库', pages: [{ href: '/kb', title: '录入页' }, { href: '/admin', title: '后台首页' }] },
     { key: 'eval', title: 'RAG 评估', pages: [{ href: '/rag-eval', title: '评估报告' }] },
     { key: 'flywheel', title: '数据飞轮', pages: [{ href: '/review', title: '飞轮待审' }, { href: '/observability', title: '观测与成本' }] },
+    { key: 'topics', title: '主题分布', pages: [{ href: '/topics', title: '主题分布' }, { href: '/topics/questions', title: '类目问题' }] },
   ];
 
   const STYLE = `

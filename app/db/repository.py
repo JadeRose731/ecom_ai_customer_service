@@ -614,11 +614,14 @@ async def topic_distribution(samples_per_class: int = 3) -> dict:
 
 async def topic_questions(label: str, page: int = 1, size: int = 20) -> dict:
     """类目问题列表:labels 命中判断与分页在 Python 侧做(池量级百级,不依赖 MySQL JSON 函数)。
-    未归并显示原话;归并显示标准化问法并另带原话;审核状态跟着 review_queue。"""
+    未归并显示原话;归并显示标准化问法并另带原话;审核状态跟着 review_queue;
+    附来源/同义合并条数/归类时间供列表页展示。"""
     stmt = (
         select(TopicClassification.question_id, TopicClassification.labels,
-               LowConfidenceQuestion.raw_question,
-               ReviewQueue.normalized_question, ReviewQueue.review_status)
+               TopicClassification.classified_at,
+               LowConfidenceQuestion.raw_question, LowConfidenceQuestion.source,
+               ReviewQueue.normalized_question, ReviewQueue.review_status,
+               ReviewQueue.occurrence_count)
         .join(LowConfidenceQuestion,
               TopicClassification.question_id == LowConfidenceQuestion.id)
         .outerjoin(ReviewQueue, LowConfidenceQuestion.matched_review_id == ReviewQueue.id)
@@ -626,12 +629,14 @@ async def topic_questions(label: str, page: int = 1, size: int = 20) -> dict:
     async with db.async_session() as s:
         rows = (await s.execute(stmt)).all()
     items = []
-    for qid, labels, raw, norm, review_status in rows:
+    for qid, labels, classified_at, raw, source, norm, review_status, occ in rows:
         if label not in (labels or []):
             continue
         items.append({"question_id": qid, "labels": labels,
                       "text": norm or raw, "raw": raw,
-                      "normalized": norm is not None, "review_status": review_status})
+                      "normalized": norm is not None, "review_status": review_status,
+                      "source": source, "occurrence_count": occ,
+                      "classified_at": classified_at.isoformat() if classified_at else None})
     total = len(items)
     pages = max(1, -(-total // size))
     page = max(1, page)
