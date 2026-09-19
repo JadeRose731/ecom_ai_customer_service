@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MewHelp · 验收·错例复核</title>
+<link rel="stylesheet" href="/static/acceptance.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🐱</div>
+    <div><h1>验收·错例复核</h1><div class="sub">每一条判错都点名——方向记账,改数据不改分数</div></div>
+    <button id="refresh">↻ 刷新</button>
+  </header>
+  <div data-admin-nav-anchor></div>
+  <div class="card" id="jobs-card"><h2>作业</h2><div id="jobs"></div></div>
+  <div id="root"></div>
+</div>
+<script src="/static/admin.js"></script>
+<script src="/static/acceptance.js"></script>
+<script>
+(function () {
+  'use strict';
+  const A = window.Acceptance;
+  const JOBS = ['ch10-eval'];
+  const root = document.getElementById('root');
+  const KIND_COLOR = { '漏打': 'st-fail', '多打': 'st-stopped', '错位': 'st-idle' };
+
+  function card(title, why) {
+    const c = document.createElement('div');
+    c.className = 'card';
+    const h = document.createElement('h2');
+    h.textContent = title;
+    c.appendChild(h);
+    if (why) {
+      const w = document.createElement('div');
+      w.className = 'why';
+      w.textContent = why;
+      c.appendChild(w);
+    }
+    return c;
+  }
+
+  async function load() {
+    const body = await A.api('/api/acceptance/errors');
+    const jobsMeta = (await A.api('/api/jobs')).jobs;
+    const jc = document.getElementById('jobs');
+    jc.innerHTML = '';
+    JOBS.forEach((n) => jc.appendChild(A.jobRow(n, jobsMeta[n], load)));
+
+    root.innerHTML = '';
+    if (!body.eval.present) {
+      root.appendChild(A.missingBox(body.eval.hint, '评测报告还没生成'));
+      return;
+    }
+
+    /* 记账口径 */
+    const c1 = card('记账口径',
+      '一条错例可以同时漏打又多打,矩阵按(漏,多)各记一笔——所以错例条数 ≠ 矩阵笔数。'
+      + '测试集 ' + body.eval.test_size + ' 条,判定阈值 ' + body.eval.threshold + '。');
+    c1.innerHTML += '<div class="why">错例 <b>' + body.errors.length + '</b> 条;矩阵 <b>' + body.matrix_entries
+      + '</b> 笔(放跑 ' + body.total_fn + ' + 冤枉 ' + body.total_fp + ')</div>';
+    root.appendChild(c1);
+
+    /* 方向计数 + 处置建议 */
+    const c2 = card('判错方向与处置', '先看方向再动手:漏打查边界表述、多打收标注铁律、错位改术语表——不改黄金样例凑分。');
+    const kindsRow = document.createElement('div');
+    kindsRow.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px';
+    ['漏打', '多打', '错位'].forEach((k) => {
+      const sp = document.createElement('span');
+      sp.className = 'pill ' + (KIND_COLOR[k] || 'st-idle');
+      sp.textContent = k + ' ' + (body.kinds[k] || 0) + ' 条';
+      kindsRow.appendChild(sp);
+    });
+    if (!body.errors.length) {
+      const sp = document.createElement('span');
+      sp.className = 'pill st-pass';
+      sp.textContent = '✅ 零错例';
+      kindsRow.appendChild(sp);
+    }
+    c2.appendChild(kindsRow);
+    const recipes = document.createElement('div');
+    recipes.className = 'why';
+    recipes.innerHTML = Object.entries(body.recipes)
+      .map(([k, v]) => '<b>' + A.esc(k) + '</b>:' + A.esc(v)).join('<br>');
+    c2.appendChild(recipes);
+    root.appendChild(c2);
+
+    /* 边界摩擦配对表 */
+    const c3 = card('边界摩擦配对', '同一对(放跑类 → 冤枉类)反复出现就是真摩擦;出现 ≥2 次标红,优先改这对的术语表边界。');
+    const pairs = Object.entries(body.pairs).sort((a, b) => b[1] - a[1]);
+    if (!pairs.length) {
+      const d = document.createElement('div');
+      d.className = 'why';
+      d.textContent = '没有「错位」型错例,没有摩擦对。';
+      c3.appendChild(d);
+    } else {
+      const t = document.createElement('table');
+      t.className = 't';
+      const head = document.createElement('tr');
+      ['放跑(该打没打)', '→', '冤枉(不该打打了)', '次数'].forEach((h) => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        head.appendChild(th);
+      });
+      t.appendChild(head);
+      pairs.forEach(([pair, n]) => {
+        const tr = document.createElement('tr');
+        if (n >= 2) tr.className = 'bad';
+        const [m, x] = pair.split('→');
+        tr.innerHTML = '<td>' + A.esc(m) + '</td><td class="karrow">→</td><td>' + A.esc(x)
+          + '</td><td class="num">' + n + '</td>';
+        t.appendChild(tr);
+      });
+      c3.appendChild(t);
+    }
+    root.appendChild(c3);
+
+    /* 逐条错例 */
+    const c4 = card('逐条错例(' + body.errors.length + ' 条)',
+      '红=放跑(该打没打)、橙=冤枉(不该打打了)、绿=两边都打对。逐条点名,回查预标与语料,不改黄金样例凑分。');
+    body.errors.forEach((e) => {
+      const div = document.createElement('div');
+      div.className = 'err';
+      const text = document.createElement('div');
+      text.className = 'text';
+      text.textContent = e.text;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const kind = document.createElement('span');
+      kind.className = 'pill ' + (KIND_COLOR[e.kind] || 'st-idle');
+      kind.textContent = e.kind;
+      meta.appendChild(kind);
+      const goldSpan = document.createElement('span');
+      goldSpan.innerHTML = '金:';
+      meta.appendChild(goldSpan);
+      (e.gold || []).forEach((g) => {
+        const s = document.createElement('span');
+        s.className = 'lb gold';
+        s.textContent = g;
+        meta.appendChild(s);
+      });
+      if ((e.missed || []).length) {
+        const ms = document.createElement('span');
+        ms.innerHTML = '<span class="karrow">漏:</span>';
+        meta.appendChild(ms);
+        e.missed.forEach((g) => {
+          const s = document.createElement('span');
+          s.className = 'lb miss';
+          s.textContent = g;
+          meta.appendChild(s);
+        });
+      }
+      if ((e.extra || []).length) {
+        const es = document.createElement('span');
+        es.innerHTML = '<span class="karrow">多:</span>';
+        meta.appendChild(es);
+        e.extra.forEach((g) => {
+          const s = document.createElement('span');
+          s.className = 'lb extra';
+          s.textContent = g;
+          meta.appendChild(s);
+        });
+      }
+      div.appendChild(text);
+      div.appendChild(meta);
+      c4.appendChild(div);
+    });
+    if (!body.errors.length) {
+      const d = document.createElement('div');
+      d.className = 'why';
+      d.textContent = '测试集上没有错例。';
+      c4.appendChild(d);
+    }
+    root.appendChild(c4);
+  }
+
+  document.getElementById('refresh').addEventListener('click', () => {
+    load().catch((e) => A.toast(e.message, 'err'));
+  });
+  mountAdminNav('acceptance');
+  load().catch((e) => { root.appendChild(A.missingBox(e.message, '取数失败')); });
+})();
+</script>
+</body>
+</html>

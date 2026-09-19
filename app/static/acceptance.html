@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MewHelp · 分类器验收总览</title>
+<link rel="stylesheet" href="/static/acceptance.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🐱</div>
+    <div><h1>分类器验收总览</h1><div class="sub">九项实证,数与终端 make 跑出来的是同一份产物</div></div>
+    <button id="refresh">↻ 刷新</button>
+  </header>
+  <div data-admin-nav-anchor></div>
+
+  <div class="summary">
+    <div class="stat"><div class="k">总闸</div><div class="v" id="s-gate">…</div></div>
+    <div class="stat"><div class="k">推理服务 :8110</div><div class="v" id="s-svc">…</div></div>
+    <div class="stat"><div class="k">测试集红线</div><div class="v dim" id="s-eval">…</div></div>
+  </div>
+
+  <div class="gates" id="gates"></div>
+</div>
+<script src="/static/admin.js"></script>
+<script src="/static/acceptance.js"></script>
+<script>
+(function () {
+  'use strict';
+  const A = window.Acceptance;
+  const GATE_TEXT = { pass: '✅ 过线', fail: '🔴 未过', missing: '○ 没跑过' };
+  const EVAL_TEXT = { pass: '✅ 红线全过', fail: '🔴 有未达标', missing: '评测还没跑' };
+
+  async function load() {
+    const body = await A.api('/api/acceptance/overview');
+    document.getElementById('s-gate').innerHTML =
+      body.passed + '<span class="of"> / ' + body.total + '</span>';
+    const svc = document.getElementById('s-svc');
+    svc.innerHTML = body.classifier.online
+      ? '<span class="pill st-pass">在线</span>'
+      : '<span class="pill st-missing">未拉起</span>';
+    const evalBlock = body.blocks.find((b) => b.key === 'eval');
+    const se = document.getElementById('s-eval');
+    se.innerHTML = '<span class="pill st-' + evalBlock.status + '">' + EVAL_TEXT[evalBlock.status] + '</span> '
+      + A.esc(evalBlock.status === 'missing' ? '' : evalBlock.headline);
+
+    const gates = document.getElementById('gates');
+    gates.innerHTML = '';
+    body.blocks.forEach((b) => {
+      const card = document.createElement('div');
+      card.className = 'gate';
+      const top = document.createElement('div');
+      top.className = 'top';
+      top.innerHTML = '<span class="no">' + String(b.no).padStart(2, '0') + '</span>'
+        + '<span class="title">' + A.esc(b.title) + '</span>'
+        + '<span class="pill st-' + b.status + '">' + GATE_TEXT[b.status] + '</span>';
+      const hl = document.createElement('div');
+      hl.className = 'headline';
+      hl.textContent = b.headline;
+      card.appendChild(top);
+      card.appendChild(hl);
+      if (b.note) {
+        const note = document.createElement('div');
+        note.className = 'note';
+        note.textContent = b.note;
+        card.appendChild(note);
+      }
+      const foot = document.createElement('div');
+      foot.className = 'foot';
+      if (b.page) {
+        const a = document.createElement('a');
+        a.href = b.page;
+        a.textContent = '详情 →';
+        foot.appendChild(a);
+      }
+      card.appendChild(foot);
+      // 该闸的作业就地重跑:作业完成回调整页重取数(日志尾有缓存,重建不清空)
+      b.jobs.forEach((name) => {
+        card.appendChild(A.jobRow(name, body.jobs[name], load));
+      });
+      gates.appendChild(card);
+    });
+  }
+
+  document.getElementById('refresh').addEventListener('click', () => {
+    load().catch((e) => A.toast(e.message, 'err'));
+  });
+  mountAdminNav('acceptance');
+  load().catch((e) => {
+    document.getElementById('gates').appendChild(A.missingBox(e.message, '总览取数失败'));
+  });
+})();
+</script>
+</body>
+</html>

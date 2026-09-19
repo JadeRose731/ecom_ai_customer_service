@@ -10,6 +10,7 @@
     { key: 'eval', title: 'RAG 评估', pages: [{ href: '/rag-eval', title: '评估报告' }] },
     { key: 'flywheel', title: '数据飞轮', pages: [{ href: '/review', title: '飞轮待审' }, { href: '/observability', title: '观测与成本' }] },
     { key: 'topics', title: '主题分布', pages: [{ href: '/topics', title: '主题分布' }, { href: '/topics/questions', title: '类目问题' }] },
+    { key: 'acceptance', title: '分类器验收', pages: [{ href: '/acceptance', title: '总览' }, { href: '/acceptance/eval', title: '评测详情' }, { href: '/acceptance/data', title: '数据产物' }, { href: '/acceptance/errors', title: '错例复核' }] },
   ];
 
   const STYLE = `

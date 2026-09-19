@@ -1,63 +1,117 @@
-/* acceptance.css · 后台共用外壳(配色 / 闸条 / 表格 / 作业按钮与日志窗口)
-   ch03 起由 kb、admin 页共用;与 index.html 的内联样式不冲突。 */
+/* acceptance.css · 分类器验收四页共用外壳:配色与卡片语言沿用 review/topics 同一套。 */
 :root {
   --bg: #f5f6f8; --panel: #ffffff; --ink: #1f2430; --muted: #8a93a6;
   --brand: #ff7a45; --brand-soft: #fff1ea; --line: #e6e9f0;
-  --ok: #16a34a; --warn: #d97706; --bad: #d03050; --idle: #94a3b8;
+  --blue: #3b82f6; --amber: #d97706; --red: #d03050; --green: #16a34a;
 }
-body.acceptance { background: var(--bg); color: var(--ink); font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
-.acceptance-wrap { max-width: 1060px; margin: 18px auto 40px; padding: 0 14px; display: flex; flex-direction: column; gap: 14px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
-.card h2 { font-size: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-.card h2 .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
-.muted { color: var(--muted); }
-.mono { font-family: Consolas, monospace; font-size: 13px; }
-
-/* 闸条(关键读数一排摆) */
-.gatebar { display: flex; flex-wrap: wrap; gap: 10px; }
-.gate { flex: 1 1 150px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
-.gate .num { font-size: 22px; font-weight: 700; }
-.gate .label { color: var(--muted); font-size: 12px; }
-
-/* 状态药丸 */
-.pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; border: 1px solid; }
-.pill.ok   { color: var(--ok);   border-color: var(--ok);   background: #f0fdf4; }
-.pill.todo { color: var(--warn); border-color: var(--warn); background: #fffbeb; }
-.pill.empty{ color: var(--idle); border-color: var(--idle); background: #f8fafc; }
-.pill.bad  { color: var(--bad);  border-color: var(--bad);  background: #fef2f2; }
-
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+.wrap { max-width: 1080px; margin: 24px auto; padding: 0 16px; }
+header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+header .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); color: #fff;
+               display: grid; place-items: center; font-size: 18px; }
+header h1 { font-size: 16px; font-weight: 600; }
+header .sub { color: var(--muted); font-size: 12px; }
+header button { margin-left: auto; border: 1px solid var(--line); background: #fff; color: var(--ink);
+                padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+header button:hover { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+        box-shadow: 0 6px 30px rgba(31,36,48,.06); padding: 14px 18px; margin-bottom: 12px; }
+.card h2 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.card .why { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+/* 三态药丸:pass 绿 / fail 红 / missing 灰蓝;作业态另有 running/stopped/idle */
+.pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12px; line-height: 1.8; }
+.st-pass  { background: #e8f7ee; color: var(--green); }
+.st-fail  { background: #fdecee; color: var(--red); }
+.st-missing { background: #eef1f6; color: #6b7480; }
+.st-running { background: var(--brand-soft); color: var(--brand); }
+.st-stopped { background: #fdf3e3; color: var(--amber); }
+.st-idle  { background: #f2f3f6; color: var(--muted); }
+/* 分数 + 横条 */
+.sc { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+.sc b { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 44px; }
+.sc .track { flex: 1; height: 10px; background: #eef0f4; border-radius: 5px; overflow: hidden; position: relative; }
+.sc .track i { display: block; height: 100%; min-width: 2px; border-radius: 5px; background: var(--brand); }
+.sc .track .tl { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: .55; }
 /* 表格 */
-table.grid { width: 100%; border-collapse: collapse; }
-table.grid th, table.grid td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; font-size: 13px; }
-table.grid th { color: var(--muted); font-weight: 500; white-space: nowrap; }
-
-/* 按钮 */
-button.act, a.act { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; text-decoration: none; display: inline-block; }
-button.act:hover, a.act:hover { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
-button.act.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
-button.act.primary:hover { opacity: .9; color: #fff; }
-button.act:disabled { opacity: .5; cursor: not-allowed; }
-.btnrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-
-/* 表单 */
-textarea.bin, input.bin, select.bin { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; outline: none; }
-textarea.bin:focus, input.bin:focus, select.bin:focus { border-color: var(--brand); }
-label.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-
-/* 作业日志窗口 */
-.logwin { background: #0f172a; color: #d7e0ee; font-family: Consolas, monospace; font-size: 12px; line-height: 1.5; border-radius: 10px; padding: 10px 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
-.logwin:empty::before { content: "（暂无日志:按上面的作业按钮跑一次)"; color: #64748b; }
-
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.t th, table.t td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; white-space: nowrap; }
+table.t th { color: var(--muted); font-weight: 500; font-size: 12px; }
+table.t tr.bad td { background: #fdecee; }
+table.t tr.best td { background: #e8f7ee; }
+table.t td.num { font-variant-numeric: tabular-nums; }
+/* 九闸卡 */
+.gates { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.gate { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+        box-shadow: 0 6px 30px rgba(31,36,48,.06); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+.gate .top { display: flex; align-items: center; gap: 8px; }
+.gate .no { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.gate .title { font-weight: 600; }
+.gate .top .pill { margin-left: auto; }
+.gate .headline { font-size: 13px; }
+.gate .note { color: var(--muted); font-size: 12px; }
+.gate .foot { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 4px; }
+.gate .foot a { color: var(--brand); font-size: 12px; text-decoration: none; }
+.gate .foot a:hover { text-decoration: underline; }
+/* 作业行:按钮 + 状态 + 日志尾 */
+.job { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.jb { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 4px 12px;
+      border-radius: 8px; cursor: pointer; font-size: 12px; }
+.jb:hover:not(:disabled) { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.jb:disabled { opacity: .55; cursor: default; }
+.job .needs { color: var(--muted); font-size: 12px; }
+.jlog { display: none; width: 100%; max-height: 220px; overflow: auto; background: #14161c; color: #cfe3cf;
+        border-radius: 10px; padding: 10px 12px; font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; }
+.jlog.open { display: block; }
+.jlog:empty::after { content: "(日志还没有内容)"; color: #566; }
+/* 产物缺失占位:「没跑过」≠「没过线」 */
+.missing { background: var(--panel); border: 1px dashed #c9d2e3; border-radius: 14px;
+           padding: 18px; text-align: center; color: var(--muted); margin-bottom: 12px; }
+.missing b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
+/* 总览顶部条 */
+.summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.summary .stat { flex: 1; min-width: 200px; background: var(--panel); border: 1px solid var(--line);
+                 border-radius: 14px; padding: 12px 18px; box-shadow: 0 6px 30px rgba(31,36,48,.06); }
+.summary .k { color: var(--muted); font-size: 12px; }
+.summary .v { font-size: 22px; font-weight: 700; line-height: 1.4; }
+.summary .v .of { color: var(--muted); font-size: 14px; font-weight: 400; }
+/* 试分类 / 错例卡 */
+.trial { display: flex; gap: 8px; margin-bottom: 10px; }
+.trial input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font: inherit; outline: none; }
+.trial input:focus { border-color: var(--brand); }
+.trial button { border: 1px solid var(--brand); background: var(--brand); color: #fff; padding: 8px 16px;
+                border-radius: 8px; cursor: pointer; font-size: 13px; }
+.trial button:hover { filter: brightness(1.06); }
+.scorelist { display: flex; flex-direction: column; gap: 4px; }
+.scorelist .row { display: flex; align-items: center; gap: 10px; }
+.scorelist .name { flex: 0 0 96px; font-size: 13px; text-align: right; color: var(--ink); }
+.scorelist .name.hit { color: var(--green); font-weight: 600; }
+.scorelist .track { flex: 1; height: 12px; background: #eef0f4; border-radius: 6px; position: relative; overflow: hidden; }
+.scorelist .track i { display: block; height: 100%; border-radius: 6px; background: #c9d2e3; }
+.scorelist .row.hit .track i { background: var(--green); }
+.scorelist .track .tl { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: .55; }
+.scorelist .val { flex: 0 0 48px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fallback { margin-top: 8px; font-size: 12px; color: var(--amber); }
+/* 混淆宫格 */
+.cm { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.cm .cell { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+.cm .cell b { display: block; font-size: 13px; margin-bottom: 2px; }
+.cm .cell .n { color: var(--muted); }
+.cm .cell .fp { color: var(--amber); }
+.cm .cell .fn { color: var(--red); }
+/* 错例卡 */
+.err { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
+.err .text { font-size: 13px; margin-bottom: 6px; }
+.err .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.lb { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px; margin-right: 2px; }
+.lb.gold { background: #e8f7ee; color: var(--green); }
+.lb.extra { background: #fdf3e3; color: var(--amber); }
+.lb.miss { background: #fdecee; color: var(--red); }
+.karrow { color: var(--muted); }
 /* toast */
-#toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 99; display: flex; flex-direction: column; gap: 8px; }
-#toast .t { background: #1f2430; color: #fff; border-radius: 8px; padding: 8px 16px; font-size: 13px; box-shadow: 0 6px 20px rgba(31,36,48,.25); }
-#toast .t.err { background: var(--bad); }
-
-/* 预览块 */
-.chunk { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
-.chunk .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
-.chunk .tag { font-size: 12px; border-radius: 999px; padding: 0 8px; border: 1px solid var(--line); color: var(--muted); }
-.chunk .tag.key { color: var(--warn); border-color: var(--warn); }
-.chunk .tag.dup { color: var(--bad); border-color: var(--bad); }
-.chunk .tag.tab { color: #2563eb; border-color: #2563eb; }
-.chunk pre.body { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+#toast-box { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 99; }
+.toast { background: #2b2f3a; color: #fff; border-radius: 10px; padding: 8px 14px; font-size: 13px;
+         box-shadow: 0 8px 24px rgba(0,0,0,.18); animation: pop .18s ease-out; }
+.toast.err { background: var(--red); }
+.toast.ok { background: var(--green); }
+@keyframes pop { from { transform: translateY(6px); opacity: 0; } }

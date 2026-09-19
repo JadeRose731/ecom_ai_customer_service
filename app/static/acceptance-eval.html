@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MewHelp · 验收·评测详情</title>
+<link rel="stylesheet" href="/static/acceptance.css">
+<style>
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .duo .card { margin-bottom: 0; }
+  .duo .v { font-size: 26px; font-weight: 700; }
+  .duo .v small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  @media (max-width: 720px) { .duo { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🐱</div>
+    <div><h1>验收·评测详情</h1><div class="sub">红线、混淆与单句试分类——数读落盘报告,不现算</div></div>
+    <button id="refresh">↻ 刷新</button>
+  </header>
+  <div data-admin-nav-anchor></div>
+
+  <div class="card" id="jobs-card"><h2>作业</h2><div id="jobs"></div></div>
+  <div id="root"></div>
+</div>
+<script src="/static/admin.js"></script>
+<script src="/static/acceptance.js"></script>
+<script>
+(function () {
+  'use strict';
+  const A = window.Acceptance;
+  const JOBS = ['ch10-eval', 'classifier-up', 'classifier-down', 'ch10-threshold-scan'];
+  const root = document.getElementById('root');
+
+  function card(title, why) {
+    const c = document.createElement('div');
+    c.className = 'card';
+    const h = document.createElement('h2');
+    h.textContent = title;
+    c.appendChild(h);
+    if (why) {
+      const w = document.createElement('div');
+      w.className = 'why';
+      w.textContent = why;
+      c.appendChild(w);
+    }
+    return c;
+  }
+
+  function table(headers) {
+    const t = document.createElement('table');
+    t.className = 't';
+    const tr = document.createElement('tr');
+    headers.forEach((h) => {
+      const th = document.createElement('th');
+      th.textContent = h;
+      tr.appendChild(th);
+    });
+    t.appendChild(tr);
+    return t;
+  }
+
+  /* ---- 单句试分类 ---- */
+  let inUseThreshold = 0.5;
+  function trialCard() {
+    const c = card('单句试分类', '竖线是在用阈值;过线的类标绿。服务对每句至少回一个类——全不过线时取最高分兜底。');
+    const bar = document.createElement('div');
+    bar.className = 'trial';
+    const input = document.createElement('input');
+    input.placeholder = '例如:买大了想退';
+    const btn = document.createElement('button');
+    btn.textContent = '试一句';
+    const out = document.createElement('div');
+    btn.addEventListener('click', async () => {
+      const text = input.value.trim();
+      if (!text) { A.toast('先输入一句话', 'err'); return; }
+      btn.disabled = true;
+      try {
+        const r = await A.api('/api/acceptance/classify', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }) });
+        renderTrial(out, r.result);
+      } catch (e) { A.toast(e.message, 'err'); }
+      btn.disabled = false;
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
+    bar.appendChild(input);
+    bar.appendChild(btn);
+    c.appendChild(bar);
+    c.appendChild(out);
+    return c;
+  }
+
+  function renderTrial(out, result) {
+    out.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'scorelist';
+    const rows = Object.entries(result.scores).sort((a, b) => b[1] - a[1]);
+    rows.forEach(([name, sc]) => {
+      const hit = result.labels.includes(name);
+      const row = document.createElement('div');
+      row.className = 'row' + (hit ? ' hit' : '');
+      const nm = document.createElement('span');
+      nm.className = 'name' + (hit ? ' hit' : '');
+      nm.textContent = name;
+      const track = document.createElement('span');
+      track.className = 'track';
+      const fill = document.createElement('i');
+      fill.style.width = (sc * 100) + '%';
+      const tl = document.createElement('i');
+      tl.className = 'tl';
+      tl.style.left = (inUseThreshold * 100) + '%';
+      track.appendChild(fill);
+      track.appendChild(tl);
+      const val = document.createElement('span');
+      val.className = 'val';
+      val.textContent = sc.toFixed(4);
+      row.appendChild(nm);
+      row.appendChild(track);
+      row.appendChild(val);
+      list.appendChild(row);
+    });
+    out.appendChild(list);
+    const passedSet = rows.filter(([, sc]) => sc >= inUseThreshold);
+    if (passedSet.length === 0 || (result.labels.length === 1 && result.scores[result.labels[0]] < inUseThreshold)) {
+      const fb = document.createElement('div');
+      fb.className = 'fallback';
+      fb.textContent = '⚠ 全部类都低于阈值——线上取最高分兜底(本次返回:' + result.labels.join('、') + ')';
+      out.appendChild(fb);
+    } else {
+      const ok = document.createElement('div');
+      ok.className = 'fallback';
+      ok.style.color = 'var(--green)';
+      ok.textContent = '过线:' + result.labels.join('、');
+      out.appendChild(ok);
+    }
+  }
+
+  /* ---- 主渲染 ---- */
+  async function load() {
+    const body = await A.api('/api/acceptance/eval');
+    const jobsMeta = (await A.api('/api/jobs')).jobs;
+    const jc = document.getElementById('jobs');
+    jc.innerHTML = '';
+    JOBS.forEach((n) => jc.appendChild(A.jobRow(n, jobsMeta[n], load)));
+
+    root.innerHTML = '';
+    const ev = body.eval;
+    if (!ev.present) {
+      root.appendChild(A.missingBox(ev.hint, '评测报告还没生成'));
+      return;
+    }
+    if (body.threshold_in_use && body.threshold_in_use.threshold != null) {
+      inUseThreshold = body.threshold_in_use.threshold;
+    } else {
+      inUseThreshold = ev.threshold;
+    }
+
+    /* micro/macro 对照 */
+    const duo = document.createElement('div');
+    duo.className = 'duo';
+    [['micro(逐标签平权)', ev.micro, '把每个(句子,标签)对平等计数——大类主导,看整体命中率。'],
+     ['macro(逐类平权)', ev.macro, '每类各算各的再平均——稀有类掉分它先知道,大类掩盖不了。']].forEach(([t, m, w]) => {
+      const c = card(t, w);
+      c.innerHTML += '<div class="v">' + m.f1.toFixed(3) +
+        ' <small>F1</small></div><div class="why">P ' + m.p.toFixed(3) + ' · R ' + m.r.toFixed(3) +
+        ' —— 两个分都要看:micro 高 macro 低,说明小类在拖后腿。</div>';
+      duo.appendChild(c);
+    });
+    root.appendChild(duo);
+
+    /* 每类指标表 */
+    const cc = card('每类指标与容错红线',
+      '红线按类目严苛度分档:严 ' + (ev.red_lines['严'] ?? '—') + ' / 中 ' + (ev.red_lines['中'] ?? '—') +
+      ';宽档不设线。不达标整行标红。');
+    const t = table(['类目', '档', 'P', 'R', 'F1', 'support', '红线', '达标']);
+    ev.classes.forEach((c0) => {
+      const tr = document.createElement('tr');
+      if (c0.passed === false) tr.className = 'bad';
+      const td = (s, cls) => {
+        const d = document.createElement('td');
+        if (cls) d.className = cls;
+        d.textContent = s;
+        return d;
+      };
+      tr.appendChild(td(c0.name));
+      tr.appendChild(td(c0.severity));
+      tr.appendChild(td(c0.p.toFixed(3), 'num'));
+      tr.appendChild(td(c0.r.toFixed(3), 'num'));
+      const f1d = document.createElement('td');
+      f1d.className = 'num';
+      f1d.appendChild(A.scoreCell(c0.f1));
+      tr.appendChild(f1d);
+      tr.appendChild(td(c0.support, 'num'));
+      tr.appendChild(td(c0.red_line == null ? '—' : c0.red_line.toFixed(2), 'num'));
+      tr.appendChild(td(c0.passed == null ? '—' : (c0.passed ? '✅' : '🔴')));
+      t.appendChild(tr);
+    });
+    cc.appendChild(t);
+    root.appendChild(cc);
+
+    /* 阈值扫描九候选线 */
+    const sc = body.scan;
+    if (!sc.present) {
+      root.appendChild(A.missingBox(sc.hint, '阈值重演还没跑'));
+    } else {
+      const c = card('阈值扫描重演(九候选线)',
+        '九条线的 F1 挤在小数点后第三位,横条按本轮 min~max 拉伸才看得出高低;当选线应与在用线一致。');
+      const head = document.createElement('div');
+      head.className = 'why';
+      const cons = sc.consistent
+        ? '<span class="pill st-pass">✅ 可复算:重演当选 ' + sc.best_threshold + ' == 在用线 ' + sc.in_use_threshold + '</span>'
+        : '<span class="pill st-fail">🔴 对不上:重演当选 ' + sc.best_threshold + ' ≠ 在用线 ' + sc.in_use_threshold + '</span>';
+      head.innerHTML = cons + '　验证集 ' + sc.val_size + ' 条,在用 F1 ' + sc.best_micro_f1;
+      c.appendChild(head);
+      const f1s = sc.scan.map((r) => r.micro_f1);
+      const lo = Math.min(...f1s), span = (Math.max(...f1s) - lo) || 1;
+      const t2 = table(['候选线', 'micro F1', '拉伸', 'tp', 'fp', 'fn', '']);
+      sc.scan.forEach((r) => {
+        const tr = document.createElement('tr');
+        if (r.threshold === sc.best_threshold) tr.className = 'best';
+        const td = (s, cls) => {
+          const d = document.createElement('td');
+          if (cls) d.className = cls;
+          d.textContent = s;
+          return d;
+        };
+        tr.appendChild(td(r.threshold.toFixed(2), 'num'));
+        tr.appendChild(td(r.micro_f1.toFixed(4), 'num'));
+        const bar = document.createElement('td');
+        bar.appendChild(A.scoreCell((r.micro_f1 - lo) / span, 0));
+        bar.lastChild.querySelector('b').textContent = '';
+        tr.appendChild(bar);
+        tr.appendChild(td(r.tp, 'num'));
+        tr.appendChild(td(r.fp, 'num'));
+        tr.appendChild(td(r.fn, 'num'));
+        tr.appendChild(td(r.threshold === sc.best_threshold ? '当选' : ''));
+        t2.appendChild(tr);
+      });
+      c.appendChild(t2);
+      root.appendChild(c);
+    }
+
+    /* 17 类混淆宫格(逐类二元的 tp/fp/fn/tn) */
+    const cm = card('17 类混淆宫格', '逐类展开的四种去向:tp 命中(绿) / fp 冤枉(橙) / fn 放跑(红) / tn 正确不说。');
+    const grid = document.createElement('div');
+    grid.className = 'cm';
+    ev.classes.forEach((c0) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.innerHTML = '<b>' + A.esc(c0.name) + '</b>'
+        + '<span class="n">tp ' + c0.tp + '</span> · <span class="fp">fp ' + c0.fp + '</span> · '
+        + '<span class="fn">fn ' + c0.fn + '</span> · <span class="n">tn ' + c0.tn + '</span>';
+      grid.appendChild(cell);
+    });
+    cm.appendChild(grid);
+    root.appendChild(cm);
+
+    root.appendChild(trialCard());
+  }
+
+  document.getElementById('refresh').addEventListener('click', () => {
+    load().catch((e) => A.toast(e.message, 'err'));
+  });
+  mountAdminNav('acceptance');
+  load().catch((e) => { root.appendChild(A.missingBox(e.message, '取数失败')); });
+})();
+</script>
+</body>
+</html>

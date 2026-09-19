@@ -94,6 +94,27 @@ async def topic_questions_page():
     return FileResponse(_STATIC / "topic-questions.html")
 
 
+# ch10:分类器验收四页(九闸总览/评测详情/数据产物/错例复核;页上按钮就地重跑作业)
+@app.get("/acceptance")
+async def acceptance_page():
+    return FileResponse(_STATIC / "acceptance.html")
+
+
+@app.get("/acceptance/eval")
+async def acceptance_eval_page():
+    return FileResponse(_STATIC / "acceptance-eval.html")
+
+
+@app.get("/acceptance/data")
+async def acceptance_data_page():
+    return FileResponse(_STATIC / "acceptance-data.html")
+
+
+@app.get("/acceptance/errors")
+async def acceptance_errors_page():
+    return FileResponse(_STATIC / "acceptance-errors.html")
+
+
 # ch03:后台共用静态资源挂 /static(页面里引 /static/admin.js 等)。
 # 注意挂载顺序:/static 先于根路径 catch-all,否则永远轮不到它。
 app.mount("/static", StaticFiles(directory=_STATIC), name="static-files")
