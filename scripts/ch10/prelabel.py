@@ -33,7 +33,7 @@ async def prelabel_one(text: str) -> list[str]:
             PRELABEL_PROMPT.format(terminology=terminology_table(), text=text))
     except Exception:
         return ["其他"]
-    labels = [lb for lb in r.labels if lb in LABEL2ID]
+    labels = [lb for lb in dict.fromkeys(r.labels) if lb in LABEL2ID]
     return labels or ["其他"]
 
 

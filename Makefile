@@ -141,3 +141,6 @@ cost-report:
 # ch10: 主题分类器(数据→训练→评测→ONNX→旁路批量归类)
 ch10-golden:  ## 预标 prompt 黄金样例验证(通过率 ≥ 80% 才放行批量预标,需上游可用)
 	PYTHONPATH=. uv run python scripts/ch10/validate_golden.py
+
+ch10-corpus: ch10-golden  ## 语料流水线:捞池→清洗→预标→模拟补足→抽审导出(依赖验证闸过线;需上游可用)
+	PYTHONPATH=. uv run python scripts/ch10/build_corpus.py
