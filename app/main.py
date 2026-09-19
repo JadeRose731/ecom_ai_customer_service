@@ -18,6 +18,7 @@ from app.api.admin import router as admin_router
 from app.api.observability import router as observability_router
 from app.api.rageval import router as rageval_router
 from app.api.review import router as review_router
+from app.api.topics import router as topics_router
 from app.graph import runtime
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ app.include_router(admin_router)
 app.include_router(observability_router)
 app.include_router(rageval_router)
 app.include_router(review_router)
+app.include_router(topics_router)
 
 # ch03 后台页面:各页保持原路径(路由必须先于根路径 StaticFiles 挂载注册,否则被吞)
 _STATIC = pathlib.Path(__file__).resolve().parent / "static"

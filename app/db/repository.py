@@ -592,6 +592,7 @@ async def topic_distribution(samples_per_class: int = 3) -> dict:
         rows = (await s.execute(stmt)).all()
     counts = {name: 0 for name in TOPIC_NAMES}
     samples: dict[str, list[str]] = {name: [] for name in TOPIC_NAMES}
+    seen: dict[str, set[str]] = {name: set() for name in TOPIC_NAMES}
     latest = None
     for labels, raw, norm, ts in rows:
         text = norm or raw
@@ -599,7 +600,9 @@ async def topic_distribution(samples_per_class: int = 3) -> dict:
         for lb in labels or []:
             if lb in counts:
                 counts[lb] += 1
-                if len(samples[lb]) < samples_per_class:
+                # 样例按展示文本去重:归并后同一句问法对应池里好几行,重复样例白给
+                if text not in seen[lb] and len(samples[lb]) < samples_per_class:
+                    seen[lb].add(text)
                     samples[lb].append(text)
     return {
         "total": len(rows),
@@ -607,3 +610,31 @@ async def topic_distribution(samples_per_class: int = 3) -> dict:
         "classes": [{"label": n, "count": counts[n], "samples": samples[n]}
                     for n in TOPIC_NAMES],
     }
+
+
+async def topic_questions(label: str, page: int = 1, size: int = 20) -> dict:
+    """类目问题列表:labels 命中判断与分页在 Python 侧做(池量级百级,不依赖 MySQL JSON 函数)。
+    未归并显示原话;归并显示标准化问法并另带原话;审核状态跟着 review_queue。"""
+    stmt = (
+        select(TopicClassification.question_id, TopicClassification.labels,
+               LowConfidenceQuestion.raw_question,
+               ReviewQueue.normalized_question, ReviewQueue.review_status)
+        .join(LowConfidenceQuestion,
+              TopicClassification.question_id == LowConfidenceQuestion.id)
+        .outerjoin(ReviewQueue, LowConfidenceQuestion.matched_review_id == ReviewQueue.id)
+    )
+    async with db.async_session() as s:
+        rows = (await s.execute(stmt)).all()
+    items = []
+    for qid, labels, raw, norm, review_status in rows:
+        if label not in (labels or []):
+            continue
+        items.append({"question_id": qid, "labels": labels,
+                      "text": norm or raw, "raw": raw,
+                      "normalized": norm is not None, "review_status": review_status})
+    total = len(items)
+    pages = max(1, -(-total // size))
+    page = max(1, page)
+    start = (page - 1) * size
+    return {"label": label, "total": total, "page": page, "pages": pages, "size": size,
+            "items": items[start:start + size]}
